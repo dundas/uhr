@@ -23,6 +23,7 @@ describe("claudeCodeAdapter full config structure", () => {
           { id: "post-tool", on: "afterToolExecution" as UniversalEvent, command: "log-tool", tools: ["write"] },
           { id: "on-stop", on: "stop" as UniversalEvent, command: "cleanup" },
           { id: "on-start", on: "sessionStart" as UniversalEvent, command: "init-session" },
+          { id: "on-end", on: "sessionEnd" as UniversalEvent, command: "teardown-session" },
           { id: "on-prompt", on: "beforePromptSubmit" as UniversalEvent, command: "validate-prompt" },
         ],
         permissions: { allow: ["Bash(npm *)", "Read(*)"] },
@@ -33,6 +34,7 @@ describe("claudeCodeAdapter full config structure", () => {
       afterToolExecution: ["multi-hook-svc/post-tool"],
       stop: ["multi-hook-svc/on-stop"],
       sessionStart: ["multi-hook-svc/on-start"],
+      sessionEnd: ["multi-hook-svc/on-end"],
       beforePromptSubmit: ["multi-hook-svc/on-prompt"],
     },
   };
@@ -41,11 +43,12 @@ describe("claudeCodeAdapter full config structure", () => {
   const content = output.content as Record<string, unknown>;
   const hooks = content.hooks as Record<string, unknown[]>;
 
-  test("event mappings: output has all five expected platform event keys", () => {
+  test("event mappings: output has all six expected platform event keys", () => {
     expect(hooks).toHaveProperty("PreToolUse");
     expect(hooks).toHaveProperty("PostToolUse");
     expect(hooks).toHaveProperty("Stop");
     expect(hooks).toHaveProperty("SessionStart");
+    expect(hooks).toHaveProperty("SessionEnd");
     expect(hooks).toHaveProperty("UserPromptSubmit");
   });
 
@@ -108,6 +111,18 @@ describe("claudeCodeAdapter full config structure", () => {
     const sessionStartEntries = hooks.SessionStart as Array<{ matcher: string }>;
     expect(sessionStartEntries).toHaveLength(1);
     expect(sessionStartEntries[0].matcher).toBe("");
+  });
+
+  test("sessionEnd maps to SessionEnd with correct command", () => {
+    const sessionEndEntries = hooks.SessionEnd as Array<{
+      matcher: string;
+      _uhrSource: string;
+      hooks: Array<{ type: string; command: string }>;
+    }>;
+    expect(sessionEndEntries).toHaveLength(1);
+    expect(sessionEndEntries[0]._uhrSource).toBe("multi-hook-svc/on-end");
+    expect(sessionEndEntries[0].hooks[0].command).toBe("teardown-session");
+    expect(sessionEndEntries[0].matcher).toBe("");
   });
 });
 
