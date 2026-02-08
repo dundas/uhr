@@ -6,6 +6,7 @@ import { loadManifest } from "./manifest";
 import { createDefaultLockfile, readLockfile, writeLockfile } from "./lockfile";
 import { applyResolvedOrder } from "./resolver";
 import { rebuildFromLockfile } from "./rebuild";
+import { listBackups, restoreBackup } from "./backup";
 import { diffManifest } from "./service-diff";
 import { uninstallBlockers } from "./service-state";
 import { computeIntegrity } from "./util/integrity";
@@ -110,7 +111,8 @@ function helpText(): string {
     "  uhr check <manifest>",
     "  uhr diff <manifest>",
     "  uhr rebuild [--platforms <list>]",
-    "  uhr doctor [--json]"
+    "  uhr doctor [--json]",
+    "  uhr restore [timestamp]"
   ].join("\n");
 }
 
@@ -207,7 +209,7 @@ async function installManifestFromData(
   const serviceManifestPath = manifestStorePath(cwd, manifest.name);
   await Bun.write(serviceManifestPath, manifestContent);
 
-  const rebuildResult = await rebuildFromLockfile(updated, cwd);
+  const rebuildResult = await rebuildFromLockfile(updated, cwd, { trigger: "install" });
 
   console.log(`Installed ${manifest.name}@${manifest.version}`);
   console.log(`Updated ${lockfilePath}`);
@@ -254,7 +256,7 @@ async function uninstallService(serviceName: string, cwd: string): Promise<numbe
     await rm(serviceManifestPath, { force: true });
   }
 
-  const rebuildResult = await rebuildFromLockfile(updated, cwd);
+  const rebuildResult = await rebuildFromLockfile(updated, cwd, { trigger: "uninstall" });
 
   console.log(`Uninstalled ${serviceName}`);
   console.log(`Updated ${lockfilePath}`);
@@ -339,7 +341,7 @@ async function rebuild(cwd: string, platforms: PlatformId[] | null): Promise<num
 
   const updated = applyResolvedOrder(lockfile);
   const lockfilePath = await writeLockfile("project", cwd, updated);
-  const rebuildResult = await rebuildFromLockfile(updated, cwd);
+  const rebuildResult = await rebuildFromLockfile(updated, cwd, { trigger: "rebuild" });
 
   console.log(`Updated ${lockfilePath}`);
   for (const file of rebuildResult.writtenFiles) {
@@ -350,6 +352,34 @@ async function rebuild(cwd: string, platforms: PlatformId[] | null): Promise<num
   }
 
   return 0;
+}
+
+async function restoreCommand(cwd: string, timestamp: string | undefined): Promise<number> {
+  if (!timestamp) {
+    const backups = await listBackups(cwd);
+    if (backups.length === 0) {
+      console.log("No backups available.");
+      return 0;
+    }
+    console.log("Available backups:");
+    for (const entry of backups) {
+      console.log(`  ${entry.timestamp}  (${entry.trigger})  files: ${entry.files.join(", ")}`);
+    }
+    console.log("\nRestore with: uhr restore <timestamp>");
+    return 0;
+  }
+
+  try {
+    const result = await restoreBackup(cwd, timestamp);
+    console.log(`Restored backup from ${result.timestamp}`);
+    for (const file of result.restoredFiles) {
+      console.log(`  Restored ${file}`);
+    }
+    return 0;
+  } catch (error) {
+    console.error((error as Error).message);
+    return 1;
+  }
 }
 
 async function doctor(cwd: string, asJson: boolean): Promise<number> {
@@ -447,6 +477,10 @@ export async function runCli(argv: string[], cwd?: string): Promise<number> {
 
   if (command === "doctor") {
     return doctor(effectiveCwd, json);
+  }
+
+  if (command === "restore") {
+    return restoreCommand(effectiveCwd, arg1);
   }
 
   if (command === "list") {
