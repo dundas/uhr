@@ -2,7 +2,12 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { builtInAdapters } from "./adapters";
 import type { AdapterWarning } from "./adapters/types";
+import { createBackup } from "./backup";
 import type { UhrLockfile } from "./types";
+
+export interface RebuildOptions {
+  trigger?: string;
+}
 
 export interface RebuildResult {
   writtenFiles: string[];
@@ -131,14 +136,20 @@ function mergePreserve(existing: unknown, generated: unknown, filepath: string):
   return generated;
 }
 
-export async function rebuildFromLockfile(lockfile: UhrLockfile, cwd: string): Promise<RebuildResult> {
+export async function rebuildFromLockfile(lockfile: UhrLockfile, cwd: string, options?: RebuildOptions): Promise<RebuildResult> {
   const adapters = builtInAdapters().filter((adapter) => lockfile.platforms.includes(adapter.id));
+  const outputs = adapters.map((adapter) => ({
+    adapterId: adapter.id,
+    ...adapter.generate(lockfile, cwd),
+  }));
+
+  // Backup existing config files before writing
+  await createBackup(cwd, outputs.map((o) => o.filepath), options?.trigger ?? "rebuild");
 
   const writtenFiles: string[] = [];
   const warnings: AdapterWarning[] = [];
 
-  for (const adapter of adapters) {
-    const output = adapter.generate(lockfile, cwd);
+  for (const output of outputs) {
     await mkdir(path.dirname(output.filepath), { recursive: true });
 
     let contentToWrite: unknown = output.content;
@@ -150,7 +161,7 @@ export async function rebuildFromLockfile(lockfile: UhrLockfile, cwd: string): P
           const existingParsed = JSON.parse(await existingFile.text()) as unknown;
           contentToWrite = mergePreserve(existingParsed, output.content, output.filepath);
         } catch {
-          warnings.push({ hookId: `merge:${adapter.id}`, message: `Preserve merge skipped due to invalid JSON in ${output.filepath}` });
+          warnings.push({ hookId: `merge:${output.adapterId}`, message: `Preserve merge skipped due to invalid JSON in ${output.filepath}` });
         }
       }
     }

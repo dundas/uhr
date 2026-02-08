@@ -221,3 +221,36 @@ describe("preserve-mode merge", () => {
     expect(content.hooks).toEqual({});
   });
 });
+
+describe("rebuild backup integration", () => {
+  test("rebuildFromLockfile creates backup before writing", async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-rebuild-test-"));
+
+    // Write an existing config with known content
+    const settingsDir = path.join(tmpDir, ".claude");
+    await import("node:fs/promises").then((fs) => fs.mkdir(settingsDir, { recursive: true }));
+    await Bun.write(path.join(settingsDir, "settings.json"), '{"original":true}');
+
+    const lockfile: UhrLockfile = {
+      ...createDefaultLockfile(),
+      generatedAt: new Date().toISOString(),
+      generatedBy: "uhr@test"
+    };
+
+    await rebuildFromLockfile(lockfile, tmpDir, { trigger: "install" });
+
+    // Backup should exist
+    const indexPath = path.join(tmpDir, ".uhr", "backups", "index.json");
+    expect(await Bun.file(indexPath).exists()).toBe(true);
+
+    const index = await Bun.file(indexPath).json();
+    expect(index.entries).toHaveLength(1);
+    expect(index.entries[0].trigger).toBe("install");
+    expect(index.entries[0].files).toContain(".claude/settings.json");
+
+    // Backup content should be the original, not the generated
+    const backupPath = path.join(tmpDir, ".uhr", "backups", index.entries[0].timestamp, ".claude", "settings.json");
+    const backupContent = await Bun.file(backupPath).text();
+    expect(backupContent).toBe('{"original":true}');
+  });
+});
