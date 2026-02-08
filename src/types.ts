@@ -101,7 +101,8 @@ export interface Conflict {
     | "duplicate_hook"
     | "shared_slot"
     | "circular_ordering"
-    | "platform_gap";
+    | "platform_gap"
+    | "ownership_collision";
   severity: "error" | "warning" | "info";
   message: string;
 }
