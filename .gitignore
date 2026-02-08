@@ -1,8 +1,9 @@
 # Dependencies
 node_modules/
 
-# Brain - secret key stored after registration
-brain/config.json
+# Brain and memory (local agent state)
+brain/
+memory/
 
 # Environment
 .env

@@ -7,6 +7,7 @@ const EVENT_MAP: Record<string, string | undefined> = {
   afterToolExecution: "PostToolUse",
   stop: "Stop",
   sessionStart: "SessionStart",
+  sessionEnd: "SessionEnd",
   notification: "Notification",
   beforePromptSubmit: "UserPromptSubmit",
   permissionRequest: "PermissionRequest",
