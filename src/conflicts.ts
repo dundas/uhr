@@ -70,6 +70,36 @@ export function detectConflicts(manifest: ServiceManifest, lockfile: UhrLockfile
         }
       }
     }
+
+    // Ownership collision: warn when a managed service overlaps with imported hooks
+    if (installed.ownership === "imported") {
+      for (const candidateHook of manifest.hooks) {
+        for (const importedHook of installed.hooks) {
+          if (candidateHook.on === importedHook.on && toolsOverlap(candidateHook.tools, importedHook.tools)) {
+            conflicts.push({
+              type: "ownership_collision",
+              severity: "warning",
+              message: `${manifest.name}/${candidateHook.id} may override imported hook ${name}/${importedHook.id} on ${candidateHook.on}`
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Platform gap: hooks targeting platforms not in the lockfile
+  for (const hook of manifest.hooks) {
+    if (hook.platforms && hook.platforms.length > 0) {
+      for (const platform of hook.platforms) {
+        if (!lockfile.platforms.includes(platform)) {
+          conflicts.push({
+            type: "platform_gap",
+            severity: "warning",
+            message: `${manifest.name}/${hook.id} targets ${platform} which is not in lockfile platforms`
+          });
+        }
+      }
+    }
   }
 
   for (const required of manifest.requires ?? []) {
