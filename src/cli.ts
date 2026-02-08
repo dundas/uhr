@@ -20,6 +20,9 @@ interface ParsedArgs {
   positional: string[];
   force: boolean;
   json: boolean;
+  dryRun: boolean;
+  yes: boolean;
+  mode: string | null;
   platformsRaw: string | null;
   parseError: string | null;
 }
@@ -31,6 +34,9 @@ function parseArgs(argv: string[]): ParsedArgs {
   const positional: string[] = [];
   let force = false;
   let json = false;
+  let dryRun = false;
+  let yes = false;
+  let mode: string | null = null;
   let platformsRaw: string | null = null;
   let parseError: string | null = null;
 
@@ -47,6 +53,32 @@ function parseArgs(argv: string[]): ParsedArgs {
 
     if (token === "--json") {
       json = true;
+      continue;
+    }
+
+    if (token === "--dry-run") {
+      dryRun = true;
+      continue;
+    }
+
+    if (token === "--yes" || token === "-y") {
+      yes = true;
+      continue;
+    }
+
+    if (token.startsWith("--mode=")) {
+      mode = token.slice("--mode=".length);
+      continue;
+    }
+
+    if (token === "--mode") {
+      const value = rest[i + 1];
+      if (!value || value.startsWith("--")) {
+        parseError = "Missing value for --mode";
+        break;
+      }
+      mode = value;
+      i += 1;
       continue;
     }
 
@@ -74,7 +106,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     positional.push(token);
   }
 
-  return { command, positional, force, json, platformsRaw, parseError };
+  return { command, positional, force, json, dryRun, yes, mode, platformsRaw, parseError };
 }
 
 function parsePlatforms(raw: string | null): PlatformId[] | null {
@@ -114,7 +146,8 @@ function helpText(): string {
     "  uhr rebuild [--platforms <list>]",
     "  uhr doctor [--json]",
     "  uhr restore [timestamp]",
-    "  uhr import [--platforms <list>] [--json]"
+    "  uhr import [--platforms <list>] [--json]",
+    "  uhr migrate [--mode preserve] [--dry-run] [--yes] [--platforms <list>]"
   ].join("\n");
 }
 
@@ -420,6 +453,104 @@ async function importCommand(cwd: string, platforms: PlatformId[] | null, asJson
   return 0;
 }
 
+async function migrateCommand(
+  cwd: string,
+  options: { platforms: PlatformId[] | null; mode: string | null; dryRun: boolean; yes: boolean }
+): Promise<number> {
+  const mergeMode = options.mode ?? "preserve";
+  if (mergeMode !== "strict" && mergeMode !== "preserve" && mergeMode !== "hybrid") {
+    console.error(`Invalid mode: ${mergeMode}. Must be strict, preserve, or hybrid.`);
+    return 1;
+  }
+
+  const targetPlatforms = options.platforms ?? VALID_PLATFORMS;
+
+  // Step 1: Import existing platform hooks
+  const importResult = await importPlatforms(cwd, targetPlatforms);
+
+  if (importResult.services.length === 0) {
+    console.log("No existing hooks found to migrate.");
+    return 0;
+  }
+
+  // Step 2: Show what will happen
+  console.log("Migration plan:");
+  for (const summary of importResult.summaries) {
+    if (!summary.found) {
+      console.log(`  ${summary.platform}: no config found`);
+      continue;
+    }
+    console.log(`  ${summary.platform}: ${summary.hooksImported} hook(s) to import`);
+    for (const warning of summary.warnings) {
+      console.log(`    WARNING: ${warning}`);
+    }
+  }
+
+  for (const service of importResult.services) {
+    console.log(`\n  Service: ${service.name} (from ${service.sourcePlatform})`);
+    for (const hook of service.hooks) {
+      console.log(`    + ${hook.id}: ${hook.on} → ${hook.command}`);
+    }
+  }
+
+  console.log(`\n  Merge mode: ${mergeMode}`);
+  console.log(`  Platforms: ${targetPlatforms.join(", ")}`);
+
+  if (options.dryRun) {
+    console.log("\n[dry-run] No changes made.");
+    return 0;
+  }
+
+  if (!options.yes) {
+    console.log("\nRe-run with --yes to apply, or --dry-run to preview.");
+    return 0;
+  }
+
+  // Step 3: Register imported services in lockfile
+  await ensureProjectDirs(cwd);
+  const lockfile = await readLockfile("project", cwd);
+  lockfile.platforms = targetPlatforms;
+  lockfile.mergeMode = mergeMode as "strict" | "preserve" | "hybrid";
+
+  for (const service of importResult.services) {
+    const manifestContent = JSON.stringify({
+      name: service.name,
+      version: "0.0.0-imported",
+      hooks: service.hooks,
+      permissions: service.permissions,
+    }, null, 2);
+
+    lockfile.installed[service.name] = {
+      version: "0.0.0-imported",
+      installedAt: new Date().toISOString(),
+      integrity: await computeIntegrity(manifestContent),
+      source: `imported:${service.sourcePath}`,
+      hooks: service.hooks,
+      permissions: service.permissions,
+      ownership: "imported",
+      sourceType: "imported-tool",
+      sourcePlatform: service.sourcePlatform,
+    };
+  }
+
+  const updated = applyResolvedOrder(lockfile);
+  const lockfilePath = await writeLockfile("project", cwd, updated);
+
+  // Step 4: Rebuild with selected merge mode
+  const rebuildResult = await rebuildFromLockfile(updated, cwd, { trigger: "migrate" });
+
+  console.log(`\nMigration complete.`);
+  console.log(`Updated ${lockfilePath}`);
+  for (const file of rebuildResult.writtenFiles) {
+    console.log(`Generated ${file}`);
+  }
+  for (const warning of rebuildResult.warnings) {
+    console.log(`WARNING: ${warning.hookId}: ${warning.message}`);
+  }
+
+  return 0;
+}
+
 async function doctor(cwd: string, asJson: boolean): Promise<number> {
   const issues = await runDoctor(cwd);
 
@@ -442,7 +573,7 @@ async function doctor(cwd: string, asJson: boolean): Promise<number> {
 }
 
 export async function runCli(argv: string[], cwd?: string): Promise<number> {
-  const { command, positional, force, json, platformsRaw, parseError } = parseArgs(argv);
+  const { command, positional, force, json, dryRun, yes, mode, platformsRaw, parseError } = parseArgs(argv);
   const effectiveCwd = cwd ?? process.cwd();
   const arg1 = positional[0];
 
@@ -523,6 +654,10 @@ export async function runCli(argv: string[], cwd?: string): Promise<number> {
 
   if (command === "import") {
     return importCommand(effectiveCwd, platforms, json);
+  }
+
+  if (command === "migrate") {
+    return migrateCommand(effectiveCwd, { platforms, mode, dryRun, yes });
   }
 
   if (command === "list") {
