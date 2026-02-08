@@ -1,6 +1,7 @@
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { lockfilePathForScope, readLockfile } from "./lockfile";
+import { listBackups } from "./backup";
 import { computeIntegrity } from "./util/integrity";
 
 export interface DoctorIssue {
@@ -138,6 +139,48 @@ export async function runDoctor(cwd: string): Promise<DoctorIssue[]> {
       }
     } catch {
       issues.push({ severity: "warning", message: `Unable to verify integrity for ${name}` });
+    }
+  }
+
+  // Migration diagnostic: imported hooks at risk under strict merge mode
+  const importedServices = Object.entries(lockfile.installed).filter(
+    ([, svc]) => svc.ownership === "imported"
+  );
+  if (lockfile.mergeMode === "strict" && importedServices.length > 0) {
+    const names = importedServices.map(([n]) => n).join(", ");
+    issues.push({
+      severity: "warning",
+      message: `Merge mode is "strict" but imported services exist (${names}). Imported hooks may be overwritten on rebuild. Consider switching to "preserve" mode.`
+    });
+  }
+
+  // Migration diagnostic: stale backup index (entries referencing missing backup dirs)
+  try {
+    const backups = await listBackups(cwd);
+    for (const entry of backups) {
+      const backupDir = path.join(cwd, ".uhr", "backups", entry.timestamp);
+      if (!(await fileExists(backupDir))) {
+        issues.push({
+          severity: "warning",
+          message: `Backup index references missing directory: ${entry.timestamp}`
+        });
+      }
+    }
+  } catch {
+    // No backup index — that's fine, skip
+  }
+
+  // Migration diagnostic: imported service source platform config drift
+  for (const [name, service] of Object.entries(lockfile.installed)) {
+    if (service.ownership !== "imported" || !service.sourcePlatform) {
+      continue;
+    }
+    const platformConfigPath = configPathForPlatform(cwd, service.sourcePlatform);
+    if (!platformConfigPath || !(await fileExists(platformConfigPath))) {
+      issues.push({
+        severity: "info",
+        message: `Imported service ${name} references ${service.sourcePlatform} but platform config is missing`
+      });
     }
   }
 

@@ -156,4 +156,45 @@ describe("doctor integration", () => {
     );
     expect(hasConfigIssue).toBe(true);
   });
+
+  test("doctor --json includes migration diagnostics for strict mode + imported hooks", async () => {
+    await runCli(["init", "--platforms", "claude-code"], tmpDir);
+
+    // Set up imported service under strict merge mode
+    const lockfile = await readLockfile("project", tmpDir);
+    lockfile.mergeMode = "strict";
+    lockfile.installed["imported-claude-code"] = {
+      version: "0.0.0",
+      installedAt: new Date().toISOString(),
+      integrity: "sha256-test",
+      source: "imported:claude-code",
+      hooks: [{ id: "h1", on: "sessionStart", command: "init" }],
+      ownership: "imported",
+      sourceType: "imported-tool",
+      sourcePlatform: "claude-code"
+    };
+    await writeLockfile("project", tmpDir, lockfile);
+
+    // Create platform config so missing-config check doesn't fire
+    const claudeDir = path.join(tmpDir, ".claude");
+    await mkdir(claudeDir, { recursive: true });
+    await Bun.write(
+      path.join(claudeDir, "settings.json"),
+      JSON.stringify({ _managedBy: "uhr", _generatedAt: lockfile.generatedAt, hooks: {} })
+    );
+
+    consoleLogSpy.mockRestore();
+    const capturedOutput: string[] = [];
+    consoleLogSpy = spyOn(console, "log").mockImplementation((...args: unknown[]) => {
+      capturedOutput.push(args.map(String).join(" "));
+    });
+
+    const exitCode = await runCli(["doctor", "--json"], tmpDir);
+    const parsed = JSON.parse(capturedOutput.join("\n"));
+
+    expect(exitCode).toBe(0);
+    expect(parsed.issues.some((i: { message: string }) =>
+      i.message.includes("strict") && i.message.includes("imported")
+    )).toBe(true);
+  });
 });
