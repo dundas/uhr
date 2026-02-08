@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach, spyOn } from "bun:test";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { validateManifest, loadManifest } from "../src/manifest";
@@ -40,10 +40,14 @@ describe("invalid manifest inputs", () => {
 
   test("invalid JSON file rejects with parse error", async () => {
     const tempDir = await mkdtemp(path.join(tmpdir(), "uhr-err-"));
-    const badJsonPath = path.join(tempDir, "broken.json");
-    await writeFile(badJsonPath, "{broken", "utf8");
+    try {
+      const badJsonPath = path.join(tempDir, "broken.json");
+      await writeFile(badJsonPath, "{broken", "utf8");
 
-    await expect(loadManifest(badJsonPath, tempDir)).rejects.toThrow();
+      await expect(loadManifest(badJsonPath, tempDir)).rejects.toThrow();
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   // Additional edge cases for completeness

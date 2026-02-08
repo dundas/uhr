@@ -6,14 +6,11 @@ import { runCli } from "../../src/cli";
 import { writeManifest, readJsonFile } from "./helpers";
 
 let tmpDir: string;
-let originalCwd: string;
 let consoleLogSpy: ReturnType<typeof spyOn>;
 let consoleErrorSpy: ReturnType<typeof spyOn>;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-uninstall-"));
-  originalCwd = process.cwd();
-  process.chdir(tmpDir);
 
   consoleLogSpy = spyOn(console, "log").mockImplementation(() => {});
   consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -23,7 +20,6 @@ afterEach(async () => {
   consoleLogSpy.mockRestore();
   consoleErrorSpy.mockRestore();
 
-  process.chdir(originalCwd);
   await rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -34,7 +30,7 @@ afterEach(async () => {
 describe("E6: Clean uninstall removes service fully", () => {
   test("uninstalling one service leaves the other intact", async () => {
     // 1. Init
-    const initExit = await runCli(["init"]);
+    const initExit = await runCli(["init"], tmpDir);
     expect(initExit).toBe(0);
 
     // 2. Write service-a manifest (stop event)
@@ -54,9 +50,9 @@ describe("E6: Clean uninstall removes service fully", () => {
     const serviceBPath = await writeManifest(tmpDir, serviceBManifest);
 
     // 4. Install both
-    const installA = await runCli(["install", serviceAPath]);
+    const installA = await runCli(["install", serviceAPath], tmpDir);
     expect(installA).toBe(0);
-    const installB = await runCli(["install", serviceBPath]);
+    const installB = await runCli(["install", serviceBPath], tmpDir);
     expect(installB).toBe(0);
 
     // 5. Verify both in lockfile
@@ -67,7 +63,7 @@ describe("E6: Clean uninstall removes service fully", () => {
     expect(installedBefore["service-b"]).toBeDefined();
 
     // 6. Uninstall service-a
-    const uninstallExit = await runCli(["uninstall", "service-a"]);
+    const uninstallExit = await runCli(["uninstall", "service-a"], tmpDir);
     expect(uninstallExit).toBe(0);
 
     // 7. Read lockfile: only service-b remains, service-a is gone
@@ -109,7 +105,7 @@ describe("E6: Clean uninstall removes service fully", () => {
 describe("E7: Uninstall blocked by dependent service", () => {
   test("cannot uninstall a service required by another", async () => {
     // 1. Init
-    const initExit = await runCli(["init"]);
+    const initExit = await runCli(["init"], tmpDir);
     expect(initExit).toBe(0);
 
     // 2. Write service-a manifest
@@ -121,7 +117,7 @@ describe("E7: Uninstall blocked by dependent service", () => {
     const serviceAPath = await writeManifest(tmpDir, serviceAManifest);
 
     // 3. Install service-a
-    const installA = await runCli(["install", serviceAPath]);
+    const installA = await runCli(["install", serviceAPath], tmpDir);
     expect(installA).toBe(0);
 
     // 4. Write service-b manifest that requires service-a
@@ -134,12 +130,12 @@ describe("E7: Uninstall blocked by dependent service", () => {
     const serviceBPath = await writeManifest(tmpDir, serviceBManifest);
 
     // 5. Install service-b (service-a is already installed, so requires check passes)
-    const installB = await runCli(["install", serviceBPath, "--force"]);
+    const installB = await runCli(["install", serviceBPath], tmpDir);
     expect(installB).toBe(0);
 
     // 6. Attempt to uninstall service-a -> should fail (exit 1)
     consoleErrorSpy.mockClear();
-    const uninstallExit = await runCli(["uninstall", "service-a"]);
+    const uninstallExit = await runCli(["uninstall", "service-a"], tmpDir);
     expect(uninstallExit).toBe(1);
 
     // 7. Check console output includes "required by" and "service-b"
@@ -166,12 +162,12 @@ describe("E7: Uninstall blocked by dependent service", () => {
 describe("Uninstall non-existent service", () => {
   test("uninstalling a service that is not installed returns exit 1", async () => {
     // 1. Init
-    const initExit = await runCli(["init"]);
+    const initExit = await runCli(["init"], tmpDir);
     expect(initExit).toBe(0);
 
     // 2. Attempt to uninstall a service that was never installed
     consoleErrorSpy.mockClear();
-    const uninstallExit = await runCli(["uninstall", "nonexistent"]);
+    const uninstallExit = await runCli(["uninstall", "nonexistent"], tmpDir);
     expect(uninstallExit).toBe(1);
 
     // 3. Check output includes "not installed"

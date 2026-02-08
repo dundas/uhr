@@ -13,14 +13,11 @@ import { computeIntegrity } from "../../src/util/integrity";
 
 describe("doctor integration", () => {
   let tmpDir: string;
-  let originalCwd: string;
   let consoleLogSpy: ReturnType<typeof spyOn>;
   let consoleErrorSpy: ReturnType<typeof spyOn>;
 
   beforeEach(async () => {
     tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-doctor-int-"));
-    originalCwd = process.cwd();
-    process.chdir(tmpDir);
     consoleLogSpy = spyOn(console, "log").mockImplementation(() => {});
     consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
   });
@@ -28,7 +25,6 @@ describe("doctor integration", () => {
   afterEach(async () => {
     consoleLogSpy.mockRestore();
     consoleErrorSpy.mockRestore();
-    process.chdir(originalCwd);
     await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -55,8 +51,8 @@ describe("doctor integration", () => {
     await writeFile(manifestPath, manifestContent, "utf8");
 
     // Init and install via CLI
-    await runCli(["init"]);
-    await runCli(["install", manifestPath]);
+    await runCli(["init"], tmpDir);
+    await runCli(["install", manifestPath], tmpDir);
 
     // Step 2: Modify lockfile generatedAt to a future date
     const lockfile = await readLockfile("project", tmpDir);
@@ -104,8 +100,8 @@ describe("doctor integration", () => {
     const manifestContent = JSON.stringify(manifest, null, 2);
     await writeFile(manifestPath, manifestContent, "utf8");
 
-    await runCli(["init"]);
-    await runCli(["install", manifestPath]);
+    await runCli(["init"], tmpDir);
+    await runCli(["install", manifestPath], tmpDir);
 
     // Step 2: Modify the original source manifest file (changing content)
     const modifiedManifest = {
@@ -127,7 +123,7 @@ describe("doctor integration", () => {
 
   test("doctor --json outputs valid JSON with issues array", async () => {
     // Step 1: Init in fresh dir (will have warnings about missing config)
-    await runCli(["init"]);
+    await runCli(["init"], tmpDir);
 
     // Step 2: Reset the spy to capture only doctor output
     consoleLogSpy.mockRestore();
@@ -137,7 +133,7 @@ describe("doctor integration", () => {
     });
 
     // Step 3: Run doctor --json via CLI
-    const exitCode = await runCli(["doctor", "--json"]);
+    const exitCode = await runCli(["doctor", "--json"], tmpDir);
 
     // Step 4: Parse captured output as JSON
     const jsonOutput = capturedOutput.join("\n");

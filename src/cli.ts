@@ -373,9 +373,9 @@ async function doctor(cwd: string, asJson: boolean): Promise<number> {
   return issues.some((issue) => issue.severity === "error") ? 1 : 0;
 }
 
-export async function runCli(argv: string[]): Promise<number> {
+export async function runCli(argv: string[], cwd?: string): Promise<number> {
   const { command, positional, force, json, platformsRaw, parseError } = parseArgs(argv);
-  const cwd = process.cwd();
+  const effectiveCwd = cwd ?? process.cwd();
   const arg1 = positional[0];
 
   if (parseError) {
@@ -397,7 +397,7 @@ export async function runCli(argv: string[]): Promise<number> {
   }
 
   if (command === "init") {
-    await initProject(cwd, platforms);
+    await initProject(effectiveCwd, platforms);
     return 0;
   }
 
@@ -406,7 +406,7 @@ export async function runCli(argv: string[]): Promise<number> {
       console.error("Usage: uhr install <manifest> [--force] [--platforms <list>]");
       return 1;
     }
-    return installManifest(arg1, cwd, { force, platforms });
+    return installManifest(arg1, effectiveCwd, { force, platforms });
   }
 
   if (command === "uninstall") {
@@ -414,7 +414,7 @@ export async function runCli(argv: string[]): Promise<number> {
       console.error("Usage: uhr uninstall <name>");
       return 1;
     }
-    return uninstallService(arg1, cwd);
+    return uninstallService(arg1, effectiveCwd);
   }
 
   if (command === "update") {
@@ -422,7 +422,7 @@ export async function runCli(argv: string[]): Promise<number> {
       console.error("Usage: uhr update <name> [--force] [--platforms <list>]");
       return 1;
     }
-    return updateService(arg1, cwd, { force, platforms });
+    return updateService(arg1, effectiveCwd, { force, platforms });
   }
 
   if (command === "check") {
@@ -430,7 +430,7 @@ export async function runCli(argv: string[]): Promise<number> {
       console.error("Usage: uhr check <manifest>");
       return 1;
     }
-    return checkManifest(arg1, cwd);
+    return checkManifest(arg1, effectiveCwd);
   }
 
   if (command === "diff") {
@@ -438,19 +438,19 @@ export async function runCli(argv: string[]): Promise<number> {
       console.error("Usage: uhr diff <manifest>");
       return 1;
     }
-    return diffService(arg1, cwd);
+    return diffService(arg1, effectiveCwd);
   }
 
   if (command === "rebuild") {
-    return rebuild(cwd, platforms);
+    return rebuild(effectiveCwd, platforms);
   }
 
   if (command === "doctor") {
-    return doctor(cwd, json);
+    return doctor(effectiveCwd, json);
   }
 
   if (command === "list") {
-    const lockfile = await readLockfile("project", cwd);
+    const lockfile = await readLockfile("project", effectiveCwd);
     const names = Object.keys(lockfile.installed);
     if (names.length === 0) {
       console.log("No services installed.");

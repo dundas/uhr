@@ -12,14 +12,11 @@ import {
 } from "./helpers";
 
 let tmpDir: string;
-let originalCwd: string;
 let consoleLogSpy: ReturnType<typeof spyOn>;
 let consoleErrorSpy: ReturnType<typeof spyOn>;
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-integ-"));
-  originalCwd = process.cwd();
-  process.chdir(tmpDir);
 
   consoleLogSpy = spyOn(console, "log").mockImplementation(() => {});
   consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {});
@@ -29,7 +26,6 @@ afterEach(async () => {
   consoleLogSpy.mockRestore();
   consoleErrorSpy.mockRestore();
 
-  process.chdir(originalCwd);
   await rm(tmpDir, { recursive: true, force: true });
 });
 
@@ -40,7 +36,7 @@ afterEach(async () => {
 describe("E1: Init -> Install -> List -> Doctor", () => {
   test("full happy-path pipeline succeeds", async () => {
     // 1. Init
-    const initExit = await runCli(["init"]);
+    const initExit = await runCli(["init"], tmpDir);
     expect(initExit).toBe(0);
 
     // 2. Verify lockfile exists
@@ -50,7 +46,7 @@ describe("E1: Init -> Install -> List -> Doctor", () => {
 
     // 3. Write formatter manifest and install
     const manifestPath = await writeManifest(tmpDir, formatterManifest());
-    const installExit = await runCli(["install", manifestPath]);
+    const installExit = await runCli(["install", manifestPath], tmpDir);
     expect(installExit).toBe(0);
 
     // 4. Read lockfile and verify installed service
@@ -87,13 +83,13 @@ describe("E1: Init -> Install -> List -> Doctor", () => {
 
     // 7. List shows installed service
     consoleLogSpy.mockClear();
-    const listExit = await runCli(["list"]);
+    const listExit = await runCli(["list"], tmpDir);
     expect(listExit).toBe(0);
     expect(consoleLogSpy).toHaveBeenCalledWith("test-formatter@1.0.0");
 
     // 8. Doctor reports no errors
     consoleLogSpy.mockClear();
-    const doctorExit = await runCli(["doctor"]);
+    const doctorExit = await runCli(["doctor"], tmpDir);
     expect(doctorExit).toBe(0);
   });
 });
@@ -105,17 +101,17 @@ describe("E1: Init -> Install -> List -> Doctor", () => {
 describe("E2: Multi-service install with ordering", () => {
   test("ordering constraints produce correct resolvedOrder and config", async () => {
     // 1. Init
-    const initExit = await runCli(["init"]);
+    const initExit = await runCli(["init"], tmpDir);
     expect(initExit).toBe(0);
 
     // 2. Write and install linter
     const linterPath = await writeManifest(tmpDir, linterManifest());
-    const linterInstall = await runCli(["install", linterPath]);
+    const linterInstall = await runCli(["install", linterPath], tmpDir);
     expect(linterInstall).toBe(0);
 
     // 3. Write and install security (runAfter: test-linter/lint-check)
     const securityPath = await writeManifest(tmpDir, securityManifest());
-    const securityInstall = await runCli(["install", securityPath]);
+    const securityInstall = await runCli(["install", securityPath], tmpDir);
     expect(securityInstall).toBe(0);
 
     // 4. Read lockfile and verify resolvedOrder
@@ -148,9 +144,9 @@ describe("E2: Multi-service install with ordering", () => {
 describe("E8: Update re-reads manifest", () => {
   test("update picks up new version and additional hook", async () => {
     // 1. Init and install v1.0.0
-    await runCli(["init"]);
+    await runCli(["init"], tmpDir);
     const manifestPath = await writeManifest(tmpDir, formatterManifest());
-    const installExit = await runCli(["install", manifestPath]);
+    const installExit = await runCli(["install", manifestPath], tmpDir);
     expect(installExit).toBe(0);
 
     // 2. Overwrite manifest with v2.0.0 + additional hook
@@ -170,7 +166,7 @@ describe("E8: Update re-reads manifest", () => {
     await Bun.write(manifestPath, JSON.stringify(updatedManifest, null, 2));
 
     // 3. Update
-    const updateExit = await runCli(["update", "test-formatter"]);
+    const updateExit = await runCli(["update", "test-formatter"], tmpDir);
     expect(updateExit).toBe(0);
 
     // 4. Verify lockfile has updated version
@@ -202,9 +198,9 @@ describe("E8: Update re-reads manifest", () => {
 describe("E9: Rebuild deterministic regeneration", () => {
   test("rebuild reproduces equivalent config after deletion", async () => {
     // 1. Init and install formatter
-    await runCli(["init"]);
+    await runCli(["init"], tmpDir);
     const manifestPath = await writeManifest(tmpDir, formatterManifest());
-    await runCli(["install", manifestPath]);
+    await runCli(["install", manifestPath], tmpDir);
 
     // 2. Read the generated settings
     const settingsPath = path.join(tmpDir, ".claude", "settings.json");
@@ -216,7 +212,7 @@ describe("E9: Rebuild deterministic regeneration", () => {
     expect(deletedExists).toBe(false);
 
     // 4. Rebuild
-    const rebuildExit = await runCli(["rebuild"]);
+    const rebuildExit = await runCli(["rebuild"], tmpDir);
     expect(rebuildExit).toBe(0);
 
     // 5. Read regenerated settings and compare hooks structure
@@ -236,14 +232,14 @@ describe("E9: Rebuild deterministic regeneration", () => {
 describe("E11: Diff preview", () => {
   test("diff shows service name and hooks to add", async () => {
     // 1. Init
-    await runCli(["init"]);
+    await runCli(["init"], tmpDir);
 
     // 2. Write formatter manifest
     const manifestPath = await writeManifest(tmpDir, formatterManifest());
 
     // 3. Run diff (not installing, just previewing)
     consoleLogSpy.mockClear();
-    const diffExit = await runCli(["diff", manifestPath]);
+    const diffExit = await runCli(["diff", manifestPath], tmpDir);
     expect(diffExit).toBe(0);
 
     // 4. Verify output includes service name and hooks to add count
