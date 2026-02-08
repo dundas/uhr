@@ -16,6 +16,10 @@ export type UniversalEvent =
   | "beforeCompact"
   | "beforeToolSelection";
 
+export type MergeMode = "strict" | "preserve" | "hybrid";
+export type HookOwnership = "uhr-managed" | "imported" | "external";
+export type HookSourceType = "uhr-service" | "imported-manual" | "imported-tool";
+
 export interface HookDeclaration {
   id: string;
   on: UniversalEvent;
@@ -65,9 +69,22 @@ export interface InstalledService {
   ordering?: Record<string, OrderingConstraint>;
   requires?: string[];
   conflicts?: string[];
+  ownership?: HookOwnership;
+  sourceType?: HookSourceType;
+  sourcePlatform?: PlatformId | null;
 }
 
 export interface UhrLockfile {
+  lockfileVersion: 2;
+  generatedAt: string;
+  generatedBy: string;
+  platforms: PlatformId[];
+  installed: Record<string, InstalledService>;
+  resolvedOrder: Record<string, string[]>;
+  mergeMode: MergeMode;
+}
+
+export interface LegacyUhrLockfileV1 {
   lockfileVersion: 1;
   generatedAt: string;
   generatedBy: string;

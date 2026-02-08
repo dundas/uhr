@@ -8,7 +8,7 @@ import type { UhrLockfile, PlatformId, UniversalEvent } from "../../src/types";
 
 describe("claudeCodeAdapter full config structure", () => {
   const lockfile: UhrLockfile = {
-    lockfileVersion: 1,
+    lockfileVersion: 2,
     generatedAt: new Date().toISOString(),
     generatedBy: "uhr@test",
     platforms: ["claude-code"] as PlatformId[],
@@ -37,6 +37,7 @@ describe("claudeCodeAdapter full config structure", () => {
       sessionEnd: ["multi-hook-svc/on-end"],
       beforePromptSubmit: ["multi-hook-svc/on-prompt"],
     },
+    mergeMode: "strict",
   };
 
   const output = claudeCodeAdapter.generate(lockfile, "/tmp/test-project");
@@ -132,7 +133,7 @@ describe("claudeCodeAdapter full config structure", () => {
 
 describe("claudeCodeAdapter unmapped event warnings", () => {
   const lockfile: UhrLockfile = {
-    lockfileVersion: 1,
+    lockfileVersion: 2,
     generatedAt: new Date().toISOString(),
     generatedBy: "uhr@test",
     platforms: ["claude-code"] as PlatformId[],
@@ -152,6 +153,7 @@ describe("claudeCodeAdapter unmapped event warnings", () => {
       afterModelResponse: ["warn-svc/unmapped"],
       sessionStart: ["warn-svc/mapped"],
     },
+    mergeMode: "strict",
   };
 
   const output = claudeCodeAdapter.generate(lockfile, "/tmp/test-project");

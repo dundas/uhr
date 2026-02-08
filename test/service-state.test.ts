@@ -4,7 +4,7 @@ import { uninstallBlockers } from "../src/service-state";
 describe("uninstallBlockers", () => {
   test("returns services that require target service", () => {
     const blockers = uninstallBlockers("core-sync", {
-      lockfileVersion: 1,
+      lockfileVersion: 2,
       generatedAt: new Date().toISOString(),
       generatedBy: "uhr@0.1.0",
       platforms: ["claude-code"],
@@ -32,7 +32,8 @@ describe("uninstallBlockers", () => {
           hooks: []
         }
       },
-      resolvedOrder: {}
+      resolvedOrder: {},
+      mergeMode: "strict"
     });
 
     expect(blockers).toEqual(["formatter"]);
