@@ -7,6 +7,7 @@ import { createDefaultLockfile, readLockfile, writeLockfile } from "./lockfile";
 import { applyResolvedOrder } from "./resolver";
 import { rebuildFromLockfile } from "./rebuild";
 import { listBackups, restoreBackup } from "./backup";
+import { importPlatforms } from "./importers";
 import { diffManifest } from "./service-diff";
 import { uninstallBlockers } from "./service-state";
 import { computeIntegrity } from "./util/integrity";
@@ -112,7 +113,8 @@ function helpText(): string {
     "  uhr diff <manifest>",
     "  uhr rebuild [--platforms <list>]",
     "  uhr doctor [--json]",
-    "  uhr restore [timestamp]"
+    "  uhr restore [timestamp]",
+    "  uhr import [--platforms <list>] [--json]"
   ].join("\n");
 }
 
@@ -382,6 +384,42 @@ async function restoreCommand(cwd: string, timestamp: string | undefined): Promi
   }
 }
 
+async function importCommand(cwd: string, platforms: PlatformId[] | null, asJson: boolean): Promise<number> {
+  const targetPlatforms = platforms ?? VALID_PLATFORMS;
+  const result = await importPlatforms(cwd, targetPlatforms);
+
+  if (asJson) {
+    console.log(JSON.stringify(result, null, 2));
+    return 0;
+  }
+
+  for (const summary of result.summaries) {
+    if (!summary.found) {
+      console.log(`${summary.platform}: no config found at ${summary.sourcePath}`);
+      continue;
+    }
+    console.log(`${summary.platform}: found ${summary.hooksImported} hook(s) at ${summary.sourcePath}`);
+    for (const warning of summary.warnings) {
+      console.log(`  WARNING: ${warning}`);
+    }
+  }
+
+  if (result.services.length === 0) {
+    console.log("\nNo hooks found to import.");
+    return 0;
+  }
+
+  console.log(`\nDiscovered ${result.services.length} service(s) with ${result.services.reduce((n, s) => n + s.hooks.length, 0)} total hook(s).`);
+  for (const service of result.services) {
+    console.log(`  ${service.name} (${service.sourcePlatform}): ${service.hooks.length} hook(s)`);
+    for (const hook of service.hooks) {
+      console.log(`    ${hook.id}: ${hook.on} → ${hook.command}`);
+    }
+  }
+
+  return 0;
+}
+
 async function doctor(cwd: string, asJson: boolean): Promise<number> {
   const issues = await runDoctor(cwd);
 
@@ -481,6 +519,10 @@ export async function runCli(argv: string[], cwd?: string): Promise<number> {
 
   if (command === "restore") {
     return restoreCommand(effectiveCwd, arg1);
+  }
+
+  if (command === "import") {
+    return importCommand(effectiveCwd, platforms, json);
   }
 
   if (command === "list") {
