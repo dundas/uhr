@@ -38,7 +38,7 @@ describe("rebuildFromLockfile", () => {
     tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-rebuild-test-"));
 
     const lockfile: UhrLockfile = {
-      lockfileVersion: 1,
+      lockfileVersion: 2,
       generatedAt: new Date().toISOString(),
       generatedBy: "uhr@test",
       platforms: ["claude-code"] as PlatformId[],
@@ -60,7 +60,8 @@ describe("rebuildFromLockfile", () => {
       },
       resolvedOrder: {
         afterToolExecution: ["test-svc/fmt"]
-      }
+      },
+      mergeMode: "strict"
     };
 
     const result = await rebuildFromLockfile(lockfile, tmpDir);
@@ -85,7 +86,7 @@ describe("rebuildFromLockfile", () => {
     tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-rebuild-test-"));
 
     const lockfile: UhrLockfile = {
-      lockfileVersion: 1,
+      lockfileVersion: 2,
       generatedAt: new Date().toISOString(),
       generatedBy: "uhr@test",
       platforms: ["claude-code"] as PlatformId[],
@@ -106,7 +107,8 @@ describe("rebuildFromLockfile", () => {
       },
       resolvedOrder: {
         afterModelResponse: ["warn-svc/respond"]
-      }
+      },
+      mergeMode: "strict"
     };
 
     const result = await rebuildFromLockfile(lockfile, tmpDir);
@@ -118,5 +120,104 @@ describe("rebuildFromLockfile", () => {
       w.message.includes("afterModelResponse")
     );
     expect(unmappedWarning).toBeDefined();
+  });
+});
+
+describe("preserve-mode merge", () => {
+  test("preserve mode keeps unmanaged hooks alongside UHR-managed hooks", async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-rebuild-test-"));
+
+    // Write a pre-existing settings.json with a manual hook
+    const settingsDir = path.join(tmpDir, ".claude");
+    await import("node:fs/promises").then((fs) => fs.mkdir(settingsDir, { recursive: true }));
+    await Bun.write(
+      path.join(settingsDir, "settings.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: "Bash", hooks: [{ type: "command", command: "manual-check" }] }
+          ]
+        },
+        permissions: { allowedTools: ["Read(*)"] }
+      })
+    );
+
+    const lockfile: UhrLockfile = {
+      lockfileVersion: 2,
+      generatedAt: new Date().toISOString(),
+      generatedBy: "uhr@test",
+      platforms: ["claude-code"] as PlatformId[],
+      installed: {
+        "test-svc": {
+          version: "1.0.0",
+          installedAt: new Date().toISOString(),
+          integrity: "sha256-abc",
+          source: "local:/tmp/test.json",
+          hooks: [
+            { id: "fmt", on: "beforeToolExecution", command: "uhr-fmt", tools: ["write"] }
+          ],
+          permissions: { allow: ["Bash(npm *)"] }
+        }
+      },
+      resolvedOrder: {
+        beforeToolExecution: ["test-svc/fmt"]
+      },
+      mergeMode: "preserve"
+    };
+
+    const result = await rebuildFromLockfile(lockfile, tmpDir);
+    const settingsPath = result.writtenFiles.find((f) => f.endsWith(".claude/settings.json"));
+    const content = await Bun.file(settingsPath!).json();
+
+    // Should have both the manual hook and the UHR hook
+    expect(content.hooks.PreToolUse).toBeArray();
+    expect(content.hooks.PreToolUse.length).toBe(2);
+
+    const manualHook = content.hooks.PreToolUse.find(
+      (h: Record<string, unknown>) => !h._uhrSource
+    );
+    const uhrHook = content.hooks.PreToolUse.find(
+      (h: Record<string, unknown>) => h._uhrSource === "test-svc/fmt"
+    );
+    expect(manualHook.hooks[0].command).toBe("manual-check");
+    expect(uhrHook.hooks[0].command).toBe("uhr-fmt");
+
+    // Permissions should be merged
+    expect(content.permissions.allowedTools).toContain("Read(*)");
+    expect(content.permissions.allowedTools).toContain("Bash(npm *)");
+  });
+
+  test("strict mode overwrites existing config entirely", async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-rebuild-test-"));
+
+    const settingsDir = path.join(tmpDir, ".claude");
+    await import("node:fs/promises").then((fs) => fs.mkdir(settingsDir, { recursive: true }));
+    await Bun.write(
+      path.join(settingsDir, "settings.json"),
+      JSON.stringify({
+        hooks: {
+          PreToolUse: [
+            { matcher: "Bash", hooks: [{ type: "command", command: "manual-check" }] }
+          ]
+        }
+      })
+    );
+
+    const lockfile: UhrLockfile = {
+      lockfileVersion: 2,
+      generatedAt: new Date().toISOString(),
+      generatedBy: "uhr@test",
+      platforms: ["claude-code"] as PlatformId[],
+      installed: {},
+      resolvedOrder: {},
+      mergeMode: "strict"
+    };
+
+    const result = await rebuildFromLockfile(lockfile, tmpDir);
+    const settingsPath = result.writtenFiles.find((f) => f.endsWith(".claude/settings.json"));
+    const content = await Bun.file(settingsPath!).json();
+
+    // Strict mode: the manual hook should be gone
+    expect(content.hooks).toEqual({});
   });
 });

@@ -12,7 +12,7 @@ describe("detectConflicts", () => {
     };
 
     const lockfile: UhrLockfile = {
-      lockfileVersion: 1,
+      lockfileVersion: 2,
       generatedAt: new Date().toISOString(),
       generatedBy: "uhr@0.1.0",
       platforms: ["claude-code"],
@@ -25,7 +25,8 @@ describe("detectConflicts", () => {
           hooks: []
         }
       },
-      resolvedOrder: {}
+      resolvedOrder: {},
+      mergeMode: "strict"
     };
 
     const conflicts = detectConflicts(manifest, lockfile);
