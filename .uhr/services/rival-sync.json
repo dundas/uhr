@@ -1,0 +1,7 @@
+{
+  "name": "rival-sync",
+  "version": "1.0.0",
+  "hooks": [
+    { "id": "sync", "on": "afterToolExecution", "tools": ["write"], "command": "rival sync" }
+  ]
+}

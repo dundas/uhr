@@ -1,0 +1,33 @@
+{
+  "name": "uhr",
+  "version": "0.1.0",
+  "description": "Universal Hook Registry — npm-style dependency resolution for AI coding CLI hooks",
+  "type": "module",
+  "bin": {
+    "uhr": "./bin/uhr.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "bun x tsc --noEmit",
+    "lint": "bun x biome check src/",
+    "dev": "bun run bin/uhr.ts",
+    "brain": "claude --project . /autonomous-bootup",
+    "brain:sync": "memory-sync",
+    "brain:daemon": "memory-sync-daemon --interval 30m"
+  },
+  "keywords": [
+    "hooks",
+    "claude-code",
+    "cursor",
+    "gemini-cli",
+    "ai-coding",
+    "cli"
+  ],
+  "author": "dundas",
+  "license": "MIT",
+  "devDependencies": {
+    "agentbootup": "^0.7.1",
+    "bun-types": "latest",
+    "typescript": "^5.7.0"
+  }
+}

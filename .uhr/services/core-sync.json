@@ -1,0 +1,5 @@
+{
+  "name": "core-sync",
+  "version": "1.1.0",
+  "hooks": [{"id":"sync","on":"afterToolExecution","tools":["write","edit"],"command":"sync v2"}]
+}

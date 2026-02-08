@@ -1,0 +1,8 @@
+{
+  "name": "teleportation-cli",
+  "version": "1.3.0",
+  "hooks": [
+    { "id": "sync-after-edit", "on": "afterToolExecution", "tools": ["write"], "command": "teleport sync" }
+  ],
+  "conflicts": ["rival-sync"]
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uhr.dev/schema/manifest.v1.json",
+  "title": "UHR Manifest v1",
+  "type": "object",
+  "required": ["name", "version", "hooks"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "homepage": { "type": "string" },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "on", "command"],
+        "properties": {
+          "id": { "type": "string" },
+          "on": { "type": "string" },
+          "tools": { "type": "array", "items": { "type": "string" } },
+          "command": { "type": "string" },
+          "blocking": { "type": "boolean" },
+          "timeout": { "type": "number", "minimum": 1 },
+          "background": { "type": "boolean" },
+          "platforms": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "allow": { "type": "array", "items": { "type": "string" } },
+        "deny": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false
+    },
+    "ordering": { "type": "object" },
+    "requires": { "type": "array", "items": { "type": "string" } },
+    "conflicts": { "type": "array", "items": { "type": "string" } },
+    "meta": { "type": "object" }
+  },
+  "additionalProperties": false
+}

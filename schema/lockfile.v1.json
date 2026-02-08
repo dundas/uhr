@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://uhr.dev/schema/lockfile.v1.json",
+  "title": "UHR Lockfile v1",
+  "type": "object",
+  "required": [
+    "lockfileVersion",
+    "generatedAt",
+    "generatedBy",
+    "platforms",
+    "installed",
+    "resolvedOrder"
+  ],
+  "properties": {
+    "lockfileVersion": { "const": 1 },
+    "generatedAt": { "type": "string" },
+    "generatedBy": { "type": "string" },
+    "platforms": { "type": "array", "items": { "type": "string" } },
+    "installed": { "type": "object" },
+    "resolvedOrder": { "type": "object" }
+  },
+  "additionalProperties": false
+}
