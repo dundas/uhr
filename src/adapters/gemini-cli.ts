@@ -73,6 +73,10 @@ export const geminiCliAdapter: Adapter = {
           continue;
         }
 
+        if (hook.platforms && hook.platforms.length > 0 && !hook.platforms.includes("gemini-cli")) {
+          continue;
+        }
+
         hooks[mappedEvent].push({
           name: ref.replace("/", "-"),
           matcher: matcherForTools(hook.tools),

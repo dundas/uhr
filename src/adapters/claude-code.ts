@@ -85,6 +85,10 @@ export const claudeCodeAdapter: Adapter = {
           continue;
         }
 
+        if (hook.platforms && hook.platforms.length > 0 && !hook.platforms.includes("claude-code")) {
+          continue;
+        }
+
         hooks[platformEvent].push({
           matcher: matcherForTools(hook.tools),
           _uhrSource: ref,

@@ -87,17 +87,16 @@ export function detectConflicts(manifest: ServiceManifest, lockfile: UhrLockfile
     }
   }
 
-  // Platform gap: hooks targeting platforms not in the lockfile
+  // Platform gap: hooks whose every target platform is absent from the lockfile
   for (const hook of manifest.hooks) {
     if (hook.platforms && hook.platforms.length > 0) {
-      for (const platform of hook.platforms) {
-        if (!lockfile.platforms.includes(platform)) {
-          conflicts.push({
-            type: "platform_gap",
-            severity: "warning",
-            message: `${manifest.name}/${hook.id} targets ${platform} which is not in lockfile platforms`
-          });
-        }
+      const missing = hook.platforms.filter((p) => !lockfile.platforms.includes(p));
+      if (missing.length === hook.platforms.length) {
+        conflicts.push({
+          type: "platform_gap",
+          severity: "warning",
+          message: `${manifest.name}/${hook.id} targets ${missing.join(", ")} which ${missing.length === 1 ? "is" : "are"} not in lockfile platforms`
+        });
       }
     }
   }

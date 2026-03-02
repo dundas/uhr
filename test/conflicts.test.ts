@@ -230,7 +230,33 @@ describe("detectConflicts", () => {
     expect(conflicts.some((c) => c.type === "ownership_collision")).toBe(false);
   });
 
-  test("detects platform gap", () => {
+  test("detects platform gap when all target platforms are absent", () => {
+    const manifest: ServiceManifest = {
+      name: "multi-plat",
+      version: "1.0.0",
+      hooks: [
+        { id: "start", on: "sessionStart", command: "init", platforms: ["cursor", "gemini-cli"] }
+      ]
+    };
+
+    const lockfile: UhrLockfile = {
+      lockfileVersion: 2,
+      generatedAt: new Date().toISOString(),
+      generatedBy: "uhr@0.1.0",
+      platforms: ["claude-code"],
+      installed: {},
+      resolvedOrder: {},
+      mergeMode: "strict"
+    };
+
+    const conflicts = detectConflicts(manifest, lockfile);
+    expect(conflicts.some((c) => c.type === "platform_gap")).toBe(true);
+    const gap = conflicts.find((c) => c.type === "platform_gap");
+    expect(gap?.severity).toBe("warning");
+    expect(gap?.message).toContain("not in lockfile platforms");
+  });
+
+  test("no platform gap when at least one target platform is in lockfile", () => {
     const manifest: ServiceManifest = {
       name: "multi-plat",
       version: "1.0.0",
@@ -250,11 +276,7 @@ describe("detectConflicts", () => {
     };
 
     const conflicts = detectConflicts(manifest, lockfile);
-    expect(conflicts.some((c) => c.type === "platform_gap")).toBe(true);
-    const gap = conflicts.find((c) => c.type === "platform_gap");
-    expect(gap?.severity).toBe("warning");
-    expect(gap?.message).toContain("cursor");
-    expect(gap?.message).toContain("not in lockfile platforms");
+    expect(conflicts.some((c) => c.type === "platform_gap")).toBe(false);
   });
 
   test("no platform gap when all target platforms exist", () => {
