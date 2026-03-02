@@ -1,3 +1,5 @@
+import type { PlatformId } from "../types";
+
 function parsePermissionPattern(input: string): { tool: string; body: string } | null {
   const start = input.indexOf("(");
   const end = input.lastIndexOf(")");
@@ -47,6 +49,16 @@ export function permissionPatternsOverlap(a: string, b: string): boolean {
     return bodyA.prefix.startsWith(bodyB.prefix);
   }
   return bodyA.prefix === bodyB.prefix;
+}
+
+export function hooksForPlatforms<T extends { platforms?: PlatformId[] }>(
+  hooks: T[],
+  platforms: PlatformId[]
+): T[] {
+  return hooks.filter((hook) => {
+    if (!hook.platforms || hook.platforms.length === 0) return true;
+    return hook.platforms.some((p) => platforms.includes(p));
+  });
 }
 
 export function toolsOverlap(a?: string[], b?: string[]): boolean {

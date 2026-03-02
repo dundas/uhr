@@ -11,6 +11,7 @@ import { importPlatforms } from "./importers";
 import { diffManifest } from "./service-diff";
 import { uninstallBlockers } from "./service-state";
 import { computeIntegrity } from "./util/integrity";
+import { hooksForPlatforms } from "./util/patterns";
 import type { Conflict, InstalledService, PlatformId, ServiceManifest } from "./types";
 
 const VALID_PLATFORMS: PlatformId[] = ["claude-code", "cursor", "gemini-cli"];
@@ -256,6 +257,20 @@ async function installManifestFromData(
     console.log(`WARNING: ${warning.hookId}: ${warning.message}`);
   }
 
+  if (rebuildResult.writtenFiles.length === 0) {
+    console.error("WARNING: No platform configs were written. Verify lockfile platforms match the manifest.");
+  }
+
+  // Warn when the service has hooks but none target any active platform
+  const activePlatforms = updated.platforms;
+  if (manifest.hooks.length > 0 && hooksForPlatforms(manifest.hooks, activePlatforms).length === 0) {
+    const hookPlatforms = Array.from(new Set(manifest.hooks.flatMap((h) => h.platforms ?? []))).join(", ");
+    console.error(
+      `WARNING: ${manifest.name} has ${manifest.hooks.length} hook(s) but none target the active platforms (${activePlatforms.join(", ")}). ` +
+      `Hook platforms: ${hookPlatforms}. Re-run with --platforms ${hookPlatforms} to include them.`
+    );
+  }
+
   return 0;
 }
 
@@ -370,13 +385,13 @@ async function diffService(manifestPath: string, cwd: string): Promise<number> {
 
 async function rebuild(cwd: string, platforms: PlatformId[] | null): Promise<number> {
   const lockfile = await readLockfile("project", cwd);
-  if (platforms && platforms.length > 0) {
-    lockfile.platforms = platforms;
-  }
 
   const updated = applyResolvedOrder(lockfile);
   const lockfilePath = await writeLockfile("project", cwd, updated);
-  const rebuildResult = await rebuildFromLockfile(updated, cwd, { trigger: "rebuild" });
+
+  // Apply --platforms as a one-time adapter filter; do not persist to lockfile
+  const rebuildTarget = platforms && platforms.length > 0 ? { ...updated, platforms } : updated;
+  const rebuildResult = await rebuildFromLockfile(rebuildTarget, cwd, { trigger: "rebuild" });
 
   console.log(`Updated ${lockfilePath}`);
   for (const file of rebuildResult.writtenFiles) {
@@ -384,6 +399,10 @@ async function rebuild(cwd: string, platforms: PlatformId[] | null): Promise<num
   }
   for (const warning of rebuildResult.warnings) {
     console.log(`WARNING: ${warning.hookId}: ${warning.message}`);
+  }
+
+  if (rebuildResult.writtenFiles.length === 0) {
+    console.error("WARNING: No platform configs were written. Verify lockfile platforms are configured.");
   }
 
   return 0;
