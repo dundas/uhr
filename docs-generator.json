@@ -1,0 +1,62 @@
+{
+  "project": "UHR — Universal Hook Registry",
+  "description": "npm-style dependency resolution for AI coding CLI hooks (Claude Code, Cursor, Gemini CLI)",
+  "sources": [
+    {
+      "path": "src/cli.ts",
+      "extractor": "cli-commands",
+      "provides": "CLI command handlers (init, install, uninstall, update, list, check, diff, rebuild, doctor, restore, import, migrate)"
+    },
+    {
+      "path": "src/types.ts",
+      "extractor": "typescript-api",
+      "provides": "Core TypeScript types: ServiceManifest, HookDeclaration, UhrLockfile, Conflict, PlatformId"
+    },
+    {
+      "path": "src/conflicts.ts",
+      "extractor": "typescript-api",
+      "provides": "Conflict detection engine — all conflict types and detection logic"
+    },
+    {
+      "path": "UHR_SPEC.md",
+      "extractor": "generic",
+      "provides": "Full technical specification — authoritative source for behavior, lockfile schema, platform semantics"
+    },
+    {
+      "path": "package.json",
+      "extractor": "architecture",
+      "provides": "Package metadata, dependencies, scripts"
+    },
+    {
+      "path": "tsconfig.json",
+      "extractor": "architecture",
+      "provides": "TypeScript configuration and module system"
+    }
+  ],
+  "outputs": [
+    {
+      "type": "llms-txt",
+      "path": "llms.txt",
+      "maxLines": 200,
+      "audience": "AI agents integrating with or building on UHR"
+    },
+    {
+      "type": "cli-reference",
+      "path": "docs/CLI_REFERENCE.md",
+      "audience": "Developers using the uhr CLI"
+    },
+    {
+      "type": "architecture",
+      "path": "docs/ARCHITECTURE.md",
+      "diagrams": ["component", "data-flow"],
+      "includeEnvVars": false,
+      "includeSecuritySection": false
+    }
+  ],
+  "validate": ["bun run typecheck"],
+  "rules": {
+    "sourceIsTruth": true,
+    "preserveExamples": true,
+    "addTimestamp": true
+  }
+}

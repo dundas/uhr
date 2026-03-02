@@ -1,0 +1,173 @@
+# UHR — Universal Hook Registry
+
+> npm-style dependency resolution for AI coding CLI hooks (Claude Code, Cursor, Gemini CLI).
+> Applies the npm model to hooks: services declare requirements in a manifest, UHR merges
+> declarations, detects conflicts, and generates platform-native configs as build artifacts.
+
+<!-- Generated: 2026-03-02 | Source: src/cli.ts, src/types.ts, src/conflicts.ts -->
+
+## Core Concepts
+
+- **Service Manifest** — JSON file declaring a service's hooks, permissions, and ordering constraints
+- **Lockfile** (`.uhr/uhr.lock.json`) — deterministic state of all installed services; source of truth
+- **Platform configs** (`.claude/settings.json`, `.cursor/hooks.json`, `.gemini/settings.json`) — generated artifacts, never hand-edited
+- **Platforms**: `claude-code`, `cursor`, `gemini-cli`
+- **Merge modes**: `strict` (UHR owns all hooks), `preserve` (imported hooks coexist), `hybrid`
+
+## CLI Commands
+
+```
+uhr init [--platforms <list>]
+  Initialize .uhr/ in the current project. Default platform: claude-code.
+  --platforms  Comma-separated: claude-code,cursor,gemini-cli
+
+uhr install <manifest> [--force] [--platforms <list>]
+  Install a service from a manifest file. Detects conflicts before writing.
+  --force      Override conflict errors
+  --platforms  Override active platforms for this install (not persisted to lockfile)
+
+uhr uninstall <name>
+  Remove a service and regenerate platform configs. Blocked if other services depend on it.
+
+uhr update <name> [--force] [--platforms <list>]
+  Re-install a service from its original local: source path.
+
+uhr list
+  List installed services with versions and hook counts.
+
+uhr check <manifest>
+  Dry-run conflict check. Exit 0 = no errors. Exit 1 = conflicts found.
+
+uhr diff <manifest>
+  Show hooks added/removed/changed vs. currently installed version.
+
+uhr rebuild [--platforms <list>]
+  Regenerate all platform configs from lockfile.
+  --platforms  Filter which platform configs to write (ephemeral, does not change lockfile).
+
+uhr doctor [--json]
+  Diagnose issues: missing configs, stale generated files, integrity mismatches,
+  services with no hooks for active platforms, import/merge risks.
+  Exit 0 = no errors, Exit 1 = errors found.
+
+uhr restore [timestamp]
+  Without timestamp: list available backups.
+  With timestamp: restore platform configs from that backup.
+
+uhr import [--platforms <list>] [--json]
+  Scan existing platform configs and report importable hooks. Read-only (no changes).
+
+uhr migrate [--mode preserve] [--dry-run] [--yes] [--platforms <list>]
+  Import existing platform hooks into UHR management.
+  --mode       strict | preserve | hybrid (default: preserve)
+  --dry-run    Preview without writing
+  --yes        Apply the migration
+```
+
+## Manifest Schema
+
+```json
+{
+  "name": "my-service",
+  "version": "1.0.0",
+  "description": "Optional description",
+  "hooks": [
+    {
+      "id": "unique-hook-id",
+      "on": "sessionStart",
+      "command": "echo hello",
+      "tools": ["Bash", "Read"],
+      "blocking": false,
+      "timeout": 5000,
+      "background": false,
+      "platforms": ["claude-code"]
+    }
+  ],
+  "permissions": {
+    "allow": ["Bash(git *)"],
+    "deny": ["Bash(rm -rf *)"]
+  },
+  "ordering": {
+    "other-service": { "runAfter": ["other-service"] }
+  },
+  "requires": ["other-service"],
+  "conflicts": ["incompatible-service"]
+}
+```
+
+## Hook Events (UniversalEvent)
+
+| Event | Description |
+|-------|-------------|
+| `sessionStart` | AI session begins |
+| `sessionEnd` | AI session ends |
+| `beforeToolExecution` | Before any tool call |
+| `afterToolExecution` | After any tool call |
+| `beforePromptSubmit` | Before user prompt sent |
+| `afterModelResponse` | After model response received |
+| `beforeFileRead` | Before reading a file |
+| `beforeMcpExecution` | Before MCP tool call |
+| `permissionRequest` | When tool permission requested |
+| `notification` | Notification event |
+| `stop` | Agent stop |
+| `subagentStop` | Subagent stop |
+| `beforeCompact` | Before context compaction |
+| `beforeToolSelection` | Before tool selection |
+
+## Conflict Types
+
+| Type | Severity | Trigger |
+|------|----------|---------|
+| `explicit` | error | `conflicts` field declares incompatibility |
+| `missing_requirement` | error | `requires` dependency not installed |
+| `permission_contradiction` | error | One service allows what another denies |
+| `duplicate_hook` | warning | Identical hook (event+tools+command) already installed |
+| `shared_slot` | warning | Same event+tools slot, different command |
+| `circular_ordering` | error | Cycle in `ordering` constraints |
+| `platform_gap` | warning | Hook targets a platform not in lockfile platforms |
+| `ownership_collision` | warning | UHR-managed hook conflicts with imported hook |
+
+## Key Types
+
+```typescript
+type PlatformId = "claude-code" | "cursor" | "gemini-cli";
+type MergeMode = "strict" | "preserve" | "hybrid";
+type HookOwnership = "uhr-managed" | "imported" | "external";
+
+interface UhrLockfile {
+  lockfileVersion: 2;
+  generatedAt: string;
+  platforms: PlatformId[];
+  installed: Record<string, InstalledService>;
+  resolvedOrder: Record<string, string[]>;
+  mergeMode: MergeMode;
+}
+```
+
+## Pipeline
+
+```
+Service Manifest → Resolver (topological sort) → Conflict Detector → Lockfile → Platform Adapters → Generated Configs
+```
+
+## Quick Start for Agents
+
+```bash
+# Initialize project (claude-code only)
+uhr init
+
+# Initialize with multiple platforms
+uhr init --platforms claude-code,cursor,gemini-cli
+
+# Install a service
+uhr install ./my-service.json
+
+# Check for problems
+uhr doctor
+
+# Migrate existing hooks into UHR
+uhr migrate --mode preserve --yes
+
+# Regenerate configs after manual lockfile changes
+uhr rebuild
+```
