@@ -128,6 +128,71 @@ describe("claudeCodeAdapter full config structure", () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────
+// Test A3: hook.platforms filter
+// ──────────────────────────────────────────────────────────────────────
+
+describe("claudeCodeAdapter hook.platforms filter", () => {
+  const lockfile: UhrLockfile = {
+    lockfileVersion: 2,
+    generatedAt: new Date().toISOString(),
+    generatedBy: "uhr@test",
+    platforms: ["claude-code"] as PlatformId[],
+    installed: {
+      "multi-platform-svc": {
+        version: "1.0.0",
+        installedAt: new Date().toISOString(),
+        integrity: "sha256-platform-test",
+        source: "local:/tmp/test.json",
+        hooks: [
+          { id: "claude-only", on: "sessionStart" as UniversalEvent, command: "claude-init", platforms: ["claude-code"] },
+          { id: "cursor-only", on: "sessionStart" as UniversalEvent, command: "cursor-init", platforms: ["cursor"] },
+          { id: "gemini-only", on: "sessionStart" as UniversalEvent, command: "gemini-init", platforms: ["gemini-cli"] },
+          { id: "universal", on: "stop" as UniversalEvent, command: "cleanup" },
+        ],
+      },
+    },
+    resolvedOrder: {
+      sessionStart: ["multi-platform-svc/claude-only", "multi-platform-svc/cursor-only", "multi-platform-svc/gemini-only"],
+      stop: ["multi-platform-svc/universal"],
+    },
+    mergeMode: "strict",
+  };
+
+  const output = claudeCodeAdapter.generate(lockfile, "/tmp/test-project");
+  const content = output.content as Record<string, unknown>;
+  const hooks = content.hooks as Record<string, unknown[]>;
+
+  test("claude-code targeted hook is included", () => {
+    const sessionHooks = hooks.SessionStart as Array<{ _uhrSource: string }>;
+    const sources = sessionHooks.map((h) => h._uhrSource);
+    expect(sources).toContain("multi-platform-svc/claude-only");
+  });
+
+  test("cursor-only hook is excluded from claude-code output", () => {
+    const sessionHooks = hooks.SessionStart as Array<{ _uhrSource: string }>;
+    const sources = sessionHooks.map((h) => h._uhrSource);
+    expect(sources).not.toContain("multi-platform-svc/cursor-only");
+  });
+
+  test("gemini-cli-only hook is excluded from claude-code output", () => {
+    const sessionHooks = hooks.SessionStart as Array<{ _uhrSource: string }>;
+    const sources = sessionHooks.map((h) => h._uhrSource);
+    expect(sources).not.toContain("multi-platform-svc/gemini-only");
+  });
+
+  test("hook without platforms field (universal) is included", () => {
+    const stopHooks = hooks.Stop as Array<{ _uhrSource: string }>;
+    const sources = stopHooks.map((h) => h._uhrSource);
+    expect(sources).toContain("multi-platform-svc/universal");
+  });
+
+  test("only one SessionStart hook entry (the claude-code targeted one)", () => {
+    const sessionHooks = hooks.SessionStart as Array<{ _uhrSource: string }>;
+    expect(sessionHooks).toHaveLength(1);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────
 // Test A2: Unmapped events produce warnings
 // ──────────────────────────────────────────────────────────────────────
 

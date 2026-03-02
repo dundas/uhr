@@ -75,6 +75,10 @@ export const cursorAdapter: Adapter = {
           continue;
         }
 
+        if (hook.platforms && hook.platforms.length > 0 && !hook.platforms.includes("cursor")) {
+          continue;
+        }
+
         const mapped = mapEvent(eventName, hook);
         if (!mapped.event) {
           warnings.push({
