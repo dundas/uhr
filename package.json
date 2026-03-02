@@ -6,6 +6,15 @@
   "bin": {
     "uhr": "./bin/uhr.ts"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "schema/",
+    "docs/",
+    "llms.txt",
+    "CHANGELOG.md",
+    "README.md"
+  ],
   "scripts": {
     "test": "bun test",
     "typecheck": "bun x tsc --noEmit",
