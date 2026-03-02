@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { lockfilePathForScope, readLockfile } from "./lockfile";
 import { listBackups } from "./backup";
 import { computeIntegrity } from "./util/integrity";
+import { hooksForPlatforms } from "./util/patterns";
 
 export interface DoctorIssue {
   severity: "error" | "warning" | "info";
@@ -139,6 +140,21 @@ export async function runDoctor(cwd: string): Promise<DoctorIssue[]> {
       }
     } catch {
       issues.push({ severity: "warning", message: `Unable to verify integrity for ${name}` });
+    }
+  }
+
+  // Services with no hooks for any active platform
+  const activePlatformsStr = lockfile.platforms.join(", ");
+  for (const [name, service] of Object.entries(lockfile.installed)) {
+    if (service.hooks.length === 0) {
+      continue;
+    }
+    if (hooksForPlatforms(service.hooks, lockfile.platforms).length === 0) {
+      const hookPlatforms = Array.from(new Set(service.hooks.flatMap((h) => h.platforms ?? []))).join(", ");
+      issues.push({
+        severity: "warning",
+        message: `${name} has ${service.hooks.length} hook(s) but none target the lockfile platforms (${activePlatformsStr}). Hook platforms: ${hookPlatforms}`
+      });
     }
   }
 
