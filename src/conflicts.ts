@@ -95,7 +95,7 @@ export function detectConflicts(manifest: ServiceManifest, lockfile: UhrLockfile
         conflicts.push({
           type: "platform_gap",
           severity: "warning",
-          message: `${manifest.name}/${hook.id} targets ${missing.join(", ")} which are not in lockfile platforms`
+          message: `${manifest.name}/${hook.id} targets ${missing.join(", ")} which ${missing.length === 1 ? "is" : "are"} not in lockfile platforms`
         });
       }
     }
