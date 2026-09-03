@@ -1,6 +1,6 @@
 # Universal Hook Registry (UHR) — Technical Specification
 
-**Version:** 0.2.0-draft
+**Version:** 0.2.1-draft
 **Date:** February 3, 2026  
 **Status:** Pre-implementation  
 **Authors:** [dundas]

@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Added `llms.txt` (173-line AI agent reference), `docs/CLI_REFERENCE.md` (full CLI command reference), and `docs/ARCHITECTURE.md` (Mermaid diagrams, design principles, directory layout). All generated from source as single source of truth. Config at `docs-generator.json`. (PR #11, 68ca22a, 2026-03-02)
 
 ### Fixed
+- `uhr doctor` no longer flags the intentional empty backup snapshot created by a first hook install as a missing backup directory. (PR #14, ce9436d, 2026-09-03)
 - Platform-specific hooks no longer leak across adapter configs — a `platforms: ["cursor"]` hook no longer appears in `.claude/settings.json`. All three adapters now filter hooks by their declared `platforms` field. (PR #12, 8075836, 2026-03-02, closes #9)
 - `platform_gap` conflict warning now only fires when ALL of a hook's target platforms are absent from the lockfile; hooks targeting `["claude-code", "cursor"]` on a claude-code-only lockfile no longer produce a false positive. (PR #12, 8075836, 2026-03-02)
 - `rebuild --platforms` no longer permanently overwrites lockfile platforms — it is now a one-time adapter filter only (PR #10, eb4d08d, 2026-03-02)

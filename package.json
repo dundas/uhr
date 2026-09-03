@@ -1,6 +1,6 @@
 {
   "name": "@derivativelabs/uhr",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Universal Hook Registry — npm-style dependency resolution for AI coding CLI hooks",
   "type": "module",
   "bin": {
