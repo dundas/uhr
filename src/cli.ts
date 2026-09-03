@@ -13,8 +13,9 @@ import { uninstallBlockers } from "./service-state";
 import { computeIntegrity } from "./util/integrity";
 import { hooksForPlatforms } from "./util/patterns";
 import type { Conflict, InstalledService, PlatformId, ServiceManifest } from "./types";
+import { SUPPORTED_PLATFORMS } from "./platforms";
 
-const VALID_PLATFORMS: PlatformId[] = ["claude-code", "cursor", "gemini-cli"];
+const VALID_PLATFORMS: PlatformId[] = SUPPORTED_PLATFORMS;
 
 interface ParsedArgs {
   command: string | null;
@@ -137,7 +138,7 @@ function helpText(): string {
     "uhr — Universal Hook Registry",
     "",
     "Commands:",
-    "  uhr init [--platforms claude-code,cursor,gemini-cli]",
+    "  uhr init [--platforms claude-code,codex,cursor,gemini-cli]",
     "  uhr install <manifest> [--force] [--platforms <list>]",
     "  uhr uninstall <name>",
     "  uhr update <name> [--force] [--platforms <list>]",
@@ -237,7 +238,7 @@ async function installManifestFromData(
 
   const updated = applyResolvedOrder({
     ...lockfile,
-    generatedBy: "uhr@0.1.0"
+    generatedBy: "uhr@0.2.0"
   });
 
   const lockfilePath = await writeLockfile("project", cwd, updated);

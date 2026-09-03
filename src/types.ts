@@ -1,4 +1,4 @@
-export type PlatformId = "claude-code" | "cursor" | "gemini-cli";
+export type PlatformId = "claude-code" | "codex" | "cursor" | "gemini-cli";
 
 export type UniversalEvent =
   | "sessionStart"

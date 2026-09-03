@@ -4,6 +4,10 @@ import { lockfilePathForScope, readLockfile } from "./lockfile";
 import { listBackups } from "./backup";
 import { computeIntegrity } from "./util/integrity";
 import { hooksForPlatforms } from "./util/patterns";
+import { configPathForPlatform, ownershipPathForPlatform, SUPPORTED_PLATFORMS } from "./platforms";
+import { assertSafeTarget } from "./util/safe-fs";
+import { codexAdapter } from "./adapters/codex";
+import type { PlatformId } from "./types";
 
 export interface DoctorIssue {
   severity: "error" | "warning" | "info";
@@ -15,25 +19,8 @@ interface ManagedConfig {
   _generatedAt?: string;
 }
 
-function configPathForPlatform(cwd: string, platform: string): string | null {
-  if (platform === "claude-code") {
-    return path.join(cwd, ".claude", "settings.json");
-  }
-  if (platform === "cursor") {
-    return path.join(cwd, ".cursor", "hooks.json");
-  }
-  if (platform === "gemini-cli") {
-    return path.join(cwd, ".gemini", "settings.json");
-  }
-  return null;
-}
-
-function knownPlatformPaths(cwd: string): Array<{ platform: string; path: string }> {
-  return [
-    { platform: "claude-code", path: path.join(cwd, ".claude", "settings.json") },
-    { platform: "cursor", path: path.join(cwd, ".cursor", "hooks.json") },
-    { platform: "gemini-cli", path: path.join(cwd, ".gemini", "settings.json") }
-  ];
+function knownPlatformPaths(cwd: string): Array<{ platform: PlatformId; path: string }> {
+  return SUPPORTED_PLATFORMS.map((platform) => ({ platform, path: configPathForPlatform(cwd, platform) }));
 }
 
 async function fileExists(filepath: string): Promise<boolean> {
@@ -49,6 +36,67 @@ async function readManagedConfig(filepath: string): Promise<ManagedConfig | null
   }
 }
 
+async function codexRuntimeDiagnostic(cwd: string): Promise<DoctorIssue> {
+  const configPath = path.join(cwd, ".codex", "config.toml");
+  try {
+    await assertSafeTarget(cwd, configPath);
+  } catch (error) {
+    return { severity: "error", message: `Unsafe Codex config target: ${(error as Error).message}` };
+  }
+
+  const configFile = Bun.file(configPath);
+  if (await configFile.exists()) {
+    try {
+      const config = Bun.TOML.parse(await configFile.text()) as {
+        features?: { hooks?: boolean; codex_hooks?: boolean };
+      };
+      const hooksEnabled = config.features?.hooks ?? config.features?.codex_hooks;
+      if (hooksEnabled === false) {
+        return { severity: "error", message: `Codex hooks are explicitly disabled in ${configPath}` };
+      }
+    } catch {
+      return {
+        severity: "warning",
+        message: `Codex hook enablement and trust cannot be verified because ${configPath} is invalid TOML`
+      };
+    }
+  }
+
+  if (Bun.which("codex") === null) {
+    return {
+      severity: "warning",
+      message: "Codex hook availability cannot be verified because the codex executable is not on PATH"
+    };
+  }
+
+  return {
+    severity: "warning",
+    message: "Codex project-hook trust cannot be verified non-interactively; review and trust the generated hook with /hooks"
+  };
+}
+
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function containsGeneratedCodexHooks(actual: unknown, generated: unknown): boolean {
+  if (!isObject(actual) || !isObject(generated) || !isObject(actual.hooks) || !isObject(generated.hooks)) return false;
+  for (const [event, expectedValue] of Object.entries(generated.hooks)) {
+    if (!Array.isArray(expectedValue)) return false;
+    const remaining = Array.isArray(actual.hooks[event]) ? [...actual.hooks[event] as unknown[]] : [];
+    for (const expected of expectedValue) {
+      const index = remaining.findIndex((candidate) => sameJson(candidate, expected));
+      if (index < 0) return false;
+      remaining.splice(index, 1);
+    }
+  }
+  return true;
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 export async function runDoctor(cwd: string): Promise<DoctorIssue[]> {
   const issues: DoctorIssue[] = [];
   const lockfilePath = lockfilePathForScope("project", cwd);
@@ -62,7 +110,11 @@ export async function runDoctor(cwd: string): Promise<DoctorIssue[]> {
 
   for (const platform of lockfile.platforms) {
     const configPath = configPathForPlatform(cwd, platform);
-    if (!configPath) {
+    try {
+      await assertSafeTarget(cwd, configPath);
+      if (platform === "codex") await assertSafeTarget(cwd, ownershipPathForPlatform(cwd, "codex"));
+    } catch (error) {
+      issues.push({ severity: "error", message: `Unsafe config target for ${platform}: ${(error as Error).message}` });
       continue;
     }
 
@@ -74,6 +126,29 @@ export async function runDoctor(cwd: string): Promise<DoctorIssue[]> {
     const parsed = await readManagedConfig(configPath);
     if (!parsed) {
       issues.push({ severity: "warning", message: `Config is not valid JSON: ${configPath}` });
+      continue;
+    }
+
+    if (platform === "codex") {
+      const actual = parsed as unknown;
+      const expected = codexAdapter.generate(lockfile, cwd).content;
+      const ownershipPath = ownershipPathForPlatform(cwd, "codex");
+      if (!(await fileExists(ownershipPath))) {
+        issues.push({ severity: "warning", message: `Codex UHR ownership record missing: ${ownershipPath}` });
+      } else {
+        try {
+          const ownership = JSON.parse(await Bun.file(ownershipPath).text()) as { generatedAt?: string; content?: unknown };
+          if (ownership.generatedAt !== lockfile.generatedAt || !sameJson(ownership.content, expected)) {
+            issues.push({ severity: "warning", message: `Generated config drift detected for codex: ownership record does not match lockfile` });
+          }
+        } catch {
+          issues.push({ severity: "warning", message: `Codex UHR ownership record is invalid JSON: ${ownershipPath}` });
+        }
+      }
+      if (!containsGeneratedCodexHooks(actual, expected)) {
+        issues.push({ severity: "warning", message: `Generated config drift detected for codex: ${configPath}` });
+      }
+      issues.push(await codexRuntimeDiagnostic(cwd));
       continue;
     }
 
@@ -90,11 +165,20 @@ export async function runDoctor(cwd: string): Promise<DoctorIssue[]> {
   }
 
   for (const item of knownPlatformPaths(cwd)) {
+    try {
+      await assertSafeTarget(cwd, item.path);
+    } catch (error) {
+      if (!lockfile.platforms.includes(item.platform)) {
+        issues.push({ severity: "error", message: `Unsafe config target for ${item.platform}: ${(error as Error).message}` });
+      }
+      continue;
+    }
+
     if (!(await fileExists(item.path))) {
       continue;
     }
 
-    if (lockfile.platforms.includes(item.platform as "claude-code" | "cursor" | "gemini-cli")) {
+    if (lockfile.platforms.includes(item.platform)) {
       continue;
     }
 
@@ -192,7 +276,7 @@ export async function runDoctor(cwd: string): Promise<DoctorIssue[]> {
       continue;
     }
     const platformConfigPath = configPathForPlatform(cwd, service.sourcePlatform);
-    if (!platformConfigPath || !(await fileExists(platformConfigPath))) {
+    if (!(await fileExists(platformConfigPath))) {
       issues.push({
         severity: "info",
         message: `Imported service ${name} references ${service.sourcePlatform} but platform config is missing`

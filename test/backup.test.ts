@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, mkdir } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, rm, mkdir, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createBackup, listBackups, restoreBackup } from "../src/backup";
@@ -136,6 +136,15 @@ describe("listBackups", () => {
     expect(result[0].trigger).toBe("second");
     expect(result[1].trigger).toBe("first");
   });
+
+  test("rejects a symlinked backup index path", async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-backup-test-"));
+    const outside = await mkdtemp(path.join(tmpdir(), "uhr-backup-index-outside-"));
+    await symlink(outside, path.join(tmpDir, ".uhr"));
+
+    await expect(listBackups(tmpDir)).rejects.toThrow(/symlink|unsafe/i);
+    await rm(outside, { recursive: true, force: true });
+  });
 });
 
 describe("restoreBackup", () => {
@@ -206,5 +215,32 @@ describe("restoreBackup", () => {
 
     expect(result.restoredFiles).toHaveLength(1);
     expect(await Bun.file(settingsPath).text()).toBe('{"backup":true}');
+  });
+
+  test("restores the backed-up restrictive mode", async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-backup-test-"));
+    const settingsPath = path.join(tmpDir, ".codex", "hooks.json");
+    await mkdir(path.dirname(settingsPath));
+    await Bun.write(settingsPath, '{"hooks":{}}');
+    await chmod(settingsPath, 0o600);
+    const backup = await createBackup(tmpDir, [settingsPath], "rebuild");
+    await chmod(settingsPath, 0o644);
+
+    await restoreBackup(tmpDir, backup.timestamp);
+    expect((await lstat(settingsPath)).mode & 0o777).toBe(0o600);
+  });
+
+  test("rejects a symlinked restore destination", async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "uhr-backup-test-"));
+    const settingsPath = path.join(tmpDir, ".codex", "hooks.json");
+    await mkdir(path.dirname(settingsPath));
+    await Bun.write(settingsPath, '{"hooks":{}}');
+    const backup = await createBackup(tmpDir, [settingsPath], "rebuild");
+    await rm(path.join(tmpDir, ".codex"), { recursive: true, force: true });
+    const outside = await mkdtemp(path.join(tmpdir(), "uhr-restore-outside-"));
+    await symlink(outside, path.join(tmpDir, ".codex"));
+
+    await expect(restoreBackup(tmpDir, backup.timestamp)).rejects.toThrow(/symlink|unsafe/i);
+    await rm(outside, { recursive: true, force: true });
   });
 });

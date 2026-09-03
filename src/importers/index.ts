@@ -1,5 +1,6 @@
 import type { PlatformId } from "../types";
 import { importClaude } from "./claude-code";
+import { importCodex } from "./codex";
 import { importCursor } from "./cursor";
 import { importGemini } from "./gemini-cli";
 import type { ImportSummary, ImportedServiceDraft } from "./types";
@@ -29,6 +30,13 @@ export async function importPlatforms(cwd: string, platforms: PlatformId[]): Pro
       if (result.service) {
         services.push(result.service);
       }
+      continue;
+    }
+
+    if (platform === "codex") {
+      const result = await importCodex(cwd);
+      summaries.push(result.summary);
+      if (result.service) services.push(result.service);
       continue;
     }
 

@@ -1,0 +1,54 @@
+{
+  "description": "Representative Codex 0.153 hooks fixture",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "background-check",
+            "timeout": 12,
+            "async": true
+          },
+          {
+            "type": "mcp_tool",
+            "server": "scanner",
+            "tool": "scan"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "finish"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "^(Bash|Write)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "regex-filtered"
+          }
+        ]
+      }
+    ],
+    "Interrupt": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "interrupt"
+          }
+        ]
+      }
+    ]
+  }
+}
