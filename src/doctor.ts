@@ -258,6 +258,10 @@ export async function runDoctor(cwd: string): Promise<DoctorIssue[]> {
   try {
     const backups = await listBackups(cwd);
     for (const entry of backups) {
+      // A first install records missing provider files so restore can remove
+      // only UHR-owned generated output. With no copied file there is no
+      // backup directory to retain; that is an intentional empty snapshot.
+      if (entry.files.length === 0) continue;
       const backupDir = path.join(cwd, ".uhr", "backups", entry.timestamp);
       if (!(await fileExists(backupDir))) {
         issues.push({

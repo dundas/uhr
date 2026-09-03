@@ -130,6 +130,22 @@ describe("runDoctor", () => {
     expect(issues.some((i) => i.message.includes("missing directory"))).toBe(true);
   });
 
+  test("does not warn for an intentional empty backup snapshot", async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uhr-doctor-"));
+    const lockfile = createDefaultLockfile(["claude-code"]);
+    await writeLockfile("project", cwd, lockfile);
+    await mkdir(path.join(cwd, ".uhr", "backups"), { recursive: true });
+    await Bun.write(path.join(cwd, ".uhr", "backups", "index.json"), JSON.stringify({
+      version: 1,
+      entries: [{ timestamp: "2026-01-01T00-00-00.000Z", files: [], missingFiles: [".claude/settings.json"], createdAt: "2026-01-01T00:00:00.000Z", trigger: "install" }]
+    }));
+    await mkdir(path.join(cwd, ".claude"), { recursive: true });
+    await Bun.write(path.join(cwd, ".claude", "settings.json"), JSON.stringify({ _managedBy: "uhr", _generatedAt: lockfile.generatedAt, hooks: {} }));
+
+    const issues = await runDoctor(cwd);
+    expect(issues.some((issue) => issue.message.includes("missing directory"))).toBe(false);
+  });
+
   test("reports imported service with missing platform config", async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "uhr-doctor-"));
     const lockfile = createDefaultLockfile(["claude-code"]);

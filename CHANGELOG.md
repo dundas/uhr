@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+- `uhr doctor` no longer flags the intentional empty backup snapshot created by a first hook install as a missing backup directory.
+
 ### Added
 - Added first-class Codex hook configuration support, including detection, import, preserve-mode rebuild, diagnostics, and safe backup/restore behavior.
 
