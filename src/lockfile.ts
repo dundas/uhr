@@ -40,7 +40,7 @@ function upgradeV1ToV2(lockfile: LegacyUhrLockfileV1): UhrLockfile {
   return {
     lockfileVersion: 2,
     generatedAt: lockfile.generatedAt ?? new Date().toISOString(),
-    generatedBy: lockfile.generatedBy ?? "uhr@0.1.0",
+    generatedBy: lockfile.generatedBy ?? "uhr@0.2.0",
     platforms: normalizePlatforms(lockfile.platforms),
     installed,
     resolvedOrder: lockfile.resolvedOrder ?? {},
@@ -63,7 +63,7 @@ function normalizeV2(lockfile: Partial<UhrLockfile>): UhrLockfile {
   return {
     lockfileVersion: 2,
     generatedAt: lockfile.generatedAt ?? new Date().toISOString(),
-    generatedBy: lockfile.generatedBy ?? "uhr@0.1.0",
+    generatedBy: lockfile.generatedBy ?? "uhr@0.2.0",
     platforms: normalizePlatforms(lockfile.platforms),
     installed,
     resolvedOrder: lockfile.resolvedOrder ?? {},
@@ -82,7 +82,7 @@ export function createDefaultLockfile(platforms: PlatformId[] = ["claude-code"])
   return {
     lockfileVersion: 2,
     generatedAt: new Date().toISOString(),
-    generatedBy: "uhr@0.1.0",
+    generatedBy: "uhr@0.2.0",
     platforms: normalizePlatforms(platforms),
     installed: {},
     resolvedOrder: {},

@@ -1,9 +1,10 @@
-import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { builtInAdapters } from "./adapters";
 import type { AdapterWarning } from "./adapters/types";
 import { createBackup } from "./backup";
+import { ownershipPathForPlatform } from "./platforms";
 import type { UhrLockfile } from "./types";
+import { assertSafeTarget, atomicWriteFile } from "./util/safe-fs";
 
 export interface RebuildOptions {
   trigger?: string;
@@ -123,7 +124,46 @@ function mergeGeminiPreserve(existing: unknown, generated: unknown): unknown {
   return merged;
 }
 
-function mergePreserve(existing: unknown, generated: unknown, filepath: string): unknown {
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function withoutPreviousManaged(existing: unknown[], previous: unknown[]): unknown[] {
+  const remaining = [...existing];
+  for (let previousIndex = previous.length - 1; previousIndex >= 0; previousIndex -= 1) {
+    for (let index = remaining.length - 1; index >= 0; index -= 1) {
+      if (sameJson(remaining[index], previous[previousIndex])) {
+        remaining.splice(index, 1);
+        break;
+      }
+    }
+  }
+  return remaining;
+}
+
+function mergeCodexPreserve(existing: unknown, generated: unknown, previousGenerated: unknown): unknown {
+  if (!isObject(existing) || !isObject(generated)) return generated;
+
+  const existingHooks = isObject(existing.hooks) ? existing.hooks as Record<string, unknown[]> : {};
+  const generatedHooks = isObject(generated.hooks) ? generated.hooks as Record<string, unknown[]> : {};
+  const previousHooks = isObject(previousGenerated) && isObject(previousGenerated.hooks)
+    ? previousGenerated.hooks as Record<string, unknown[]>
+    : {};
+  const hooks: Record<string, unknown[]> = {};
+  const events = new Set([...Object.keys(existingHooks), ...Object.keys(previousHooks), ...Object.keys(generatedHooks)]);
+
+  for (const event of events) {
+    const existingEntries = Array.isArray(existingHooks[event]) ? existingHooks[event] : [];
+    const oldManaged = Array.isArray(previousHooks[event]) ? previousHooks[event] : [];
+    const nextManaged = Array.isArray(generatedHooks[event]) ? generatedHooks[event] : [];
+    const merged = [...withoutPreviousManaged(existingEntries, oldManaged), ...nextManaged];
+    if (merged.length > 0 || event in existingHooks) hooks[event] = merged;
+  }
+
+  return { ...generated, ...existing, hooks };
+}
+
+function mergePreserve(existing: unknown, generated: unknown, filepath: string, previousGenerated?: unknown): unknown {
   if (filepath.endsWith(".claude/settings.json")) {
     return mergeClaudePreserve(existing, generated);
   }
@@ -133,7 +173,25 @@ function mergePreserve(existing: unknown, generated: unknown, filepath: string):
   if (filepath.endsWith(".gemini/settings.json")) {
     return mergeGeminiPreserve(existing, generated);
   }
+  if (filepath.endsWith(".codex/hooks.json")) {
+    return mergeCodexPreserve(existing, generated, previousGenerated);
+  }
   return generated;
+}
+
+interface OwnershipRecord {
+  version: 1;
+  platform: string;
+  target: string;
+  generatedAt: string;
+  content: unknown;
+}
+
+async function readJsonIfPresent(cwd: string, filepath: string): Promise<unknown | undefined> {
+  await assertSafeTarget(cwd, filepath);
+  const file = Bun.file(filepath);
+  if (!(await file.exists())) return undefined;
+  return JSON.parse(await file.text()) as unknown;
 }
 
 export async function rebuildFromLockfile(lockfile: UhrLockfile, cwd: string, options?: RebuildOptions): Promise<RebuildResult> {
@@ -143,30 +201,54 @@ export async function rebuildFromLockfile(lockfile: UhrLockfile, cwd: string, op
     ...adapter.generate(lockfile, cwd),
   }));
 
+  for (const output of outputs) {
+    await assertSafeTarget(cwd, output.filepath);
+    if (output.adapterId === "codex") {
+      await assertSafeTarget(cwd, ownershipPathForPlatform(cwd, "codex"));
+    }
+  }
+
   // Backup existing config files before writing
-  await createBackup(cwd, outputs.map((o) => o.filepath), options?.trigger ?? "rebuild");
+  await createBackup(cwd, outputs.flatMap((output) => output.adapterId === "codex"
+    ? [output.filepath, ownershipPathForPlatform(cwd, "codex")]
+    : [output.filepath]), options?.trigger ?? "rebuild");
 
   const writtenFiles: string[] = [];
   const warnings: AdapterWarning[] = [];
 
   for (const output of outputs) {
-    await mkdir(path.dirname(output.filepath), { recursive: true });
-
     let contentToWrite: unknown = output.content;
+    let previousGenerated: unknown | undefined;
+
+    if (output.adapterId === "codex") {
+      const ownership = await readJsonIfPresent(cwd, ownershipPathForPlatform(cwd, "codex")) as OwnershipRecord | undefined;
+      if (ownership?.version === 1 && ownership.platform === "codex" && ownership.target === path.relative(cwd, output.filepath)) {
+        previousGenerated = ownership.content;
+      }
+    }
 
     if (lockfile.mergeMode === "preserve") {
-      const existingFile = Bun.file(output.filepath);
-      if (await existingFile.exists()) {
+      const existing = await readJsonIfPresent(cwd, output.filepath);
+      if (existing !== undefined) {
         try {
-          const existingParsed = JSON.parse(await existingFile.text()) as unknown;
-          contentToWrite = mergePreserve(existingParsed, output.content, output.filepath);
+          contentToWrite = mergePreserve(existing, output.content, output.filepath, previousGenerated);
         } catch {
           warnings.push({ hookId: `merge:${output.adapterId}`, message: `Preserve merge skipped due to invalid JSON in ${output.filepath}` });
         }
       }
     }
 
-    await Bun.write(output.filepath, JSON.stringify(contentToWrite, null, 2) + "\n");
+    await atomicWriteFile(cwd, output.filepath, JSON.stringify(contentToWrite, null, 2) + "\n");
+    if (output.adapterId === "codex") {
+      const ownership: OwnershipRecord = {
+        version: 1,
+        platform: "codex",
+        target: path.relative(cwd, output.filepath),
+        generatedAt: lockfile.generatedAt,
+        content: output.content
+      };
+      await atomicWriteFile(cwd, ownershipPathForPlatform(cwd, "codex"), JSON.stringify(ownership, null, 2) + "\n");
+    }
     writtenFiles.push(output.filepath);
     warnings.push(...output.warnings);
   }

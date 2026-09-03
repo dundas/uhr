@@ -6,6 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- Added first-class Codex hook configuration support, including detection, import, preserve-mode rebuild, diagnostics, and safe backup/restore behavior.
+
 ### Documentation
 - Added `llms.txt` (173-line AI agent reference), `docs/CLI_REFERENCE.md` (full CLI command reference), and `docs/ARCHITECTURE.md` (Mermaid diagrams, design principles, directory layout). All generated from source as single source of truth. Config at `docs-generator.json`. (PR #11, 68ca22a, 2026-03-02)
 

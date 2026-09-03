@@ -25,6 +25,8 @@ const TOOL_MAP: Record<string, string> = {
   fetch: "WebFetch"
 };
 
+const BLOCKING_EVENTS = new Set(["PreToolUse", "PermissionRequest", "UserPromptSubmit", "Stop", "SubagentStop", "PreCompact"]);
+
 function matcherForTools(tools?: string[]): string {
   if (!tools || tools.length === 0 || tools.includes("*")) {
     return "";
@@ -89,15 +91,33 @@ export const claudeCodeAdapter: Adapter = {
           continue;
         }
 
+        const handler: Record<string, unknown> = {
+          type: "command",
+          command: hook.command
+        };
+        if (hook.timeout !== undefined && !hook.background) {
+          handler.timeout = hook.timeout / 1000;
+        }
+        if (hook.background) {
+          handler.async = true;
+          if (hook.timeout !== undefined) {
+            warnings.push({
+              hookId: ref,
+              message: "Claude Code does not enforce timeout for async command hooks; timeout omitted"
+            });
+          }
+        }
+        if (hook.blocking && !BLOCKING_EVENTS.has(platformEvent)) {
+          warnings.push({
+            hookId: ref,
+            message: `Claude Code ${platformEvent} cannot provide the requested blocking semantics`
+          });
+        }
+
         hooks[platformEvent].push({
           matcher: matcherForTools(hook.tools),
           _uhrSource: ref,
-          hooks: [
-            {
-              type: "command",
-              command: hook.command
-            }
-          ]
+          hooks: [handler]
         });
       }
     }

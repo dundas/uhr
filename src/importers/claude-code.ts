@@ -57,7 +57,7 @@ export async function importClaude(cwd: string): Promise<{ summary: ImportSummar
   }
 
   const parsed = JSON.parse(await file.text()) as {
-    hooks?: Record<string, Array<{ matcher?: string; hooks?: Array<{ command?: string }> }>>;
+    hooks?: Record<string, Array<{ matcher?: string; hooks?: Array<{ type?: string; command?: string; timeout?: number; async?: boolean }> }>>;
     permissions?: { allowedTools?: string[] };
   };
 
@@ -75,7 +75,8 @@ export async function importClaude(cwd: string): Promise<{ summary: ImportSummar
       const entry = entries[i] ?? {};
       const commands = entry.hooks ?? [];
       for (let j = 0; j < commands.length; j += 1) {
-        const command = commands[j]?.command;
+        const handler = commands[j];
+        const command = handler?.command;
         if (!command) {
           continue;
         }
@@ -83,7 +84,10 @@ export async function importClaude(cwd: string): Promise<{ summary: ImportSummar
           id: `claude-${platformEvent.toLowerCase()}-${i + 1}-${j + 1}`,
           on: universalEvent,
           command,
-          tools: reverseTools(entry.matcher ?? "")
+          tools: reverseTools(entry.matcher ?? ""),
+          blocking: handler?.async !== true,
+          background: handler?.async === true,
+          ...(handler?.timeout !== undefined ? { timeout: handler.timeout * 1000 } : {})
         });
       }
     }

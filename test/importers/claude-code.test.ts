@@ -1,4 +1,6 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { importClaude } from "../../src/importers/claude-code";
 
@@ -59,5 +61,17 @@ describe("importClaude sessionEnd round-trip", () => {
   test("no warnings for fully mapped events", async () => {
     const { summary } = await importClaude(tmpDir);
     expect(summary.warnings).toHaveLength(0);
+  });
+
+  test("converts provider timeout seconds to universal milliseconds", async () => {
+    const tmp = await mkdtemp(path.join(tmpdir(), "uhr-import-claude-timeout-"));
+    await mkdir(path.join(tmp, ".claude"));
+    await Bun.write(path.join(tmp, ".claude", "settings.json"), JSON.stringify({
+      hooks: { Stop: [{ hooks: [{ type: "command", command: "stop", timeout: 1.5 }] }] }
+    }));
+
+    const result = await importClaude(tmp);
+    expect(result.service?.hooks[0]?.timeout).toBe(1500);
+    await rm(tmp, { recursive: true, force: true });
   });
 });

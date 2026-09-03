@@ -14,6 +14,6 @@ export interface AdapterOutput {
 export interface Adapter {
   id: PlatformId;
   name: string;
-  detect(): boolean;
+  detect(cwd?: string): boolean;
   generate(lockfile: UhrLockfile, cwd: string): AdapterOutput;
 }
